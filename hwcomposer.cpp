@@ -79,14 +79,100 @@
 #include "hwc_util.h"
 #include "hwc_rockchip.h"
 #include <android/configuration.h>
+
+
+//open header
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+//map header
+#include <map>
+
+//gui
+#include <ui/Rect.h>
+#include <ui/Region.h>
+#include <ui/GraphicBufferMapper.h>
+
 #define UM_PER_INCH 25400
 
 namespace android {
+
+
+#define EPD_NULL            (-1)
+#define EPD_AUTO            (0)
+#define EPD_FULL            (1)
+#define EPD_A2              (2)
+#define EPD_PART            (3)
+#define EPD_FULL_DITHER     (4)
+#define EPD_RESET           (5)
+#define EPD_BLACK_WHITE     (6)
+#define EPD_TEXT            (7)
+#define EPD_BLOCK           (8)
+#define EPD_FULL_WIN        (9)
+#define EPD_OED_PART		(10)
+#define EPD_DIRECT_PART     (11)
+#define EPD_DIRECT_A2       (12)
+#define EPD_STANDBY			(13)
+#define EPD_POWEROFF        (14)
+/*android use struct*/
+struct ebc_buf_info{
+	int offset;
+	int epd_mode;
+	int height;
+	int width;
+	int vir_height;
+	int vir_width;
+	int fb_width;
+	int fb_height;
+	int color_panel;
+	int win_x1;
+	int win_y1;
+	int win_x2;
+	int win_y2;
+	int rotate;
+}__packed;
+struct win_coordinate{
+	int x1;
+	int x2;
+	int y1;
+	int y2;
+};
+
+#define GET_EBC_BUFFER 0x7000
+#define SET_EBC_SEND_BUFFER 0x7001
+#define GET_EBC_BUFFER_INFO 0x7003
+
+#define REGION_BUFFER_SIZE 512
+
+struct region_buffer_t {
+	int size;
+	char buffer[REGION_BUFFER_SIZE];
+};
+
+static int gPixel_format = 24;
+
+void *ebc_buffer_base = NULL;
+int ebc_fd = -1;
+struct ebc_buf_info ebc_buf_info;
+static int gCurrentEpdMode = EPD_PART;
+static int gResetEpdMode = EPD_PART;
+static struct region_buffer_t gCurrentA2Region;
+static struct region_buffer_t gUpdateRegion;
+static Region gLastA2Region;
+static Region gSavedUpdateRegion;
+
 
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
                                  int index);
 
 static int update_display_bestmode(hwc_drm_display_t *hd, int display, DrmConnector *c);
+
+#if 1 //RGA_POLICY
+int hwc_set_epd(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t &fb_target,hwc_drm_display_t *hd);
+int hwc_rgba888_to_gray256(hwc_drm_display_t *hd, hwc_layer_1_t &fb_target);
+void hwc_free_buffer(hwc_drm_display_t *hd);
+#endif
+
 
 #if SKIP_BOOT
 static unsigned int g_boot_cnt = 0;
@@ -407,6 +493,7 @@ struct hwc_context_t {
   FILE* regFile;
 #endif
     bool                isGLESComp;
+    bool                isRGAComp;
 #if RK_INVALID_REFRESH
     bool                mOneWinOpt;
     threadPamaters      mRefresh;
@@ -420,6 +507,7 @@ struct hwc_context_t {
 
     std::vector<DrmCompositionDisplayPlane> comp_plane_group;
     std::vector<DrmHwcDisplayContents> layer_contents;
+    std::vector<DrmHwcDisplayContents> hw_rga_contents;
 };
 
 /**
@@ -1284,6 +1372,78 @@ static void hwc_dump(struct hwc_composer_device_1 *dev, char *buff,
 static bool hwc_skip_layer(const std::pair<int, int> &indices, int i) {
   return indices.first >= 0 && i >= indices.first && i <= indices.second;
 }
+
+static bool is_use_rga_comp(struct hwc_context_t *ctx, DrmConnector *connector, hwc_display_contents_1_t *display_content, int display_id)
+{
+  int num_layers = display_content->numHwLayers;
+  hwc_drm_display_t *hd = &ctx->displays[display_id];
+  DrmCrtc *crtc = NULL;
+  if(display_id == 1) {
+  return false;
+  }
+  if (!connector) {
+    ALOGE("%s: Failed to get connector for display %d line=%d", __FUNCTION__,display_id, __LINE__);
+  }
+  else
+  {
+      crtc = ctx->drm.GetCrtcFromConnector(connector);
+      if (connector->state() != DRM_MODE_CONNECTED || !crtc) {
+        ALOGE("Failed to get crtc for display %d line=%d", display_id, __LINE__);
+      }
+  }
+  //force go into RGA
+  int iRga = hwc_get_int_property("sys.hwc.rga_policy","1");
+  if(iRga == 6){
+    ALOGD_IF(log_level(DBG_DEBUG),"sys.hwc.rga_policy=%d,go to RGA COMPOSER at line=%d", iRga, __LINE__);
+    return true;
+  }else if(iRga == 0){
+    ALOGD_IF(log_level(DBG_DEBUG),"sys.hwc.rga_policy=%d,can't go to RGA COMPOSER at line=%d", iRga, __LINE__);
+    return false;
+  }
+
+  if(num_layers > 5){
+    ALOGD_IF(log_level(DBG_DEBUG),"RGA can't compose so much layers(%d), at line=%d", num_layers, __LINE__);
+    return false;
+  }
+
+
+  int format = 0;
+  int dataTotalSize = 0;
+  for (int j = 0; j < num_layers-1; j++) {
+      hwc_layer_1_t *layer = &display_content->hwLayers[j];
+
+      if(layer->handle)
+      {
+#if ( RK_DRM_GRALLOC)
+          format = hwc_get_handle_attibute(ctx->gralloc,layer->handle,ATT_FORMAT);
+#else
+          format = hwc_get_handle_format(ctx->gralloc,layer->handle);
+#endif
+      if(hd->isVideo && (layer->transform != 0)){
+        ALOGD_IF(log_level(DBG_DEBUG),"RGA Video rotation(%x) can't use rga_policy, at line=%d",layer->transform, __LINE__);
+        return false;
+      }
+      int src_l,src_t,src_r,src_b,src_w,src_h;
+      src_l = (int)layer->sourceCropf.left;
+      src_t = (int)layer->sourceCropf.top;
+      src_r = (int)layer->sourceCropf.right;
+      src_b = (int)layer->sourceCropf.bottom;
+      src_w = (int)(layer->sourceCropf.right - layer->sourceCropf.left);
+      src_h = (int)(layer->sourceCropf.bottom - layer->sourceCropf.top);
+      dataTotalSize += src_w * src_h;
+      }
+  }
+  /*
+   * 1024x600 + 1024x600 + 1024x48 + 1024x36 = 1314816
+   */
+  if(dataTotalSize < 1314816){
+    ALOGD_IF(log_level(DBG_DEBUG),"RGA can't compose so much data size = %d, at line=%d", dataTotalSize, __LINE__);
+    return true;
+  }
+
+  return false;
+}
+
 
 static bool is_use_gles_comp(struct hwc_context_t *ctx, DrmConnector *connector, hwc_display_contents_1_t *display_content, int display_id)
 {
@@ -2187,8 +2347,22 @@ static void freeRgaBuffers(hwc_drm_display_t *hd) {
     }
 }
 #endif
+
+static hwc_drm_display_t hwc_info;
 static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
                        hwc_display_contents_1_t **display_contents) {
+
+   for (int i = 0; i < (int)num_displays; ++i) {
+      if (!display_contents[i])
+        continue;
+      int num_layers = display_contents[i]->numHwLayers;
+      for (int j = 0; j < num_layers - 1; ++j) {
+        hwc_layer_1_t *layer = &display_contents[i]->hwLayers[j];
+        layer->compositionType = HWC_FRAMEBUFFER;
+      }
+  }
+  return 0;
+#if 0
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   int ret = -1;
   static HDMI_STAT last_hdmi_status = HDMI_ON;
@@ -2211,6 +2385,8 @@ static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
     ALOGD_IF(log_level(DBG_VERBOSE),"----------------------------frame=%d start ----------------------------",get_frame());
     ctx->layer_contents.clear();
     ctx->layer_contents.reserve(num_displays);
+    ctx->hw_rga_contents.clear();
+    ctx->hw_rga_contents.reserve(num_displays);
     ctx->comp_plane_group.clear();
 
     ctx->drm.UpdateDisplayRoute();
@@ -2240,10 +2416,7 @@ static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
 
     ALOGD_IF(log_level(DBG_VERBOSE), "************** display=%d **************", i);
     int num_layers = display_contents[i]->numHwLayers;
-    for (int j = 0; j < num_layers; j++) {
-      hwc_layer_1_t *layer = &display_contents[i]->hwLayers[j];
-      dump_layer(ctx->gralloc, false, layer, j);
-    }
+
 
     if(i == HWC_DISPLAY_VIRTUAL)
     {
@@ -2595,7 +2768,12 @@ static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
 
     if(!use_framebuffer_target)
         use_framebuffer_target = is_use_gles_comp(ctx, connector, display_contents[i], connector->display());
-
+    if(!use_framebuffer_target || connector->display() == 2) {
+        hd->mUseRgaComp = is_use_rga_comp(ctx, connector, display_contents[i], connector->display());
+        if (hd->mUseRgaComp) {
+            use_framebuffer_target = false;
+        }
+    }
     bool bHasFPS_3D_UI = false;
     int index = 0;
     for (int j = 0; j < num_layers; j++) {
@@ -2723,11 +2901,12 @@ static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
                 iRgaCnt++;
             }
         }
-        if(iRgaCnt > 1)
+        /*if(iRgaCnt > 1)
         {
             ALOGD_IF(log_level(DBG_DEBUG),"rga cnt = %d, go to GPU GLES at line=%d", iRgaCnt, __LINE__);
             use_framebuffer_target = true;
         }
+        */
     }
 
     if(!use_framebuffer_target)
@@ -2774,11 +2953,13 @@ static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
           case HWC_BACKGROUND:
           case HWC_SIDEBAND:
           case HWC_CURSOR_OVERLAY:
+          case HWC_RGA:
             layer->compositionType = HWC_FRAMEBUFFER;
             break;
         }
       }
     }
+/*
 #if RK_RGA_PREPARE_ASYNC
     if(!use_framebuffer_target && ctx->drm.isSupportRkRga())
     {
@@ -2811,6 +2992,7 @@ static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
         }
     }
 #endif
+*/
 
     if(use_framebuffer_target)
         ctx->isGLESComp = true;
@@ -2895,6 +3077,7 @@ static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
 #endif
 
   return 0;
+#endif
 }
 
 static void hwc_add_layer_to_retire_fence(
@@ -2936,14 +3119,377 @@ void signal_all_fence(DrmHwcDisplayContents &display_contents,hwc_display_conten
   hwc_sync_release(dc);
 }
 
+#if 1 //RGA_POLICY
+int hwc_rgba888_to_gray256(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t *fb_target,hwc_drm_display_t *hd) {
+    int ret = 0;
+    int rga_transform = 0;
+    int src_l,src_t,src_w,src_h;
+    int dst_l,dst_t,dst_r,dst_b;
+
+    int dst_w,dst_h,dst_stride;
+    int src_buf_w,src_buf_h,src_buf_stride,src_buf_format;
+    rga_info_t src, dst;
+    memset(&src, 0, sizeof(rga_info_t));
+    memset(&dst, 0, sizeof(rga_info_t));
+    src.fd = -1;
+    dst.fd = -1;
+
+
+    //Get virtual address
+    const gralloc_module_t *gralloc;
+    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                      (const hw_module_t **)&gralloc);
+    if (ret) {
+        ALOGE("Failed to open gralloc module");
+        return ret;
+    }
+
+#if (!RK_PER_MODE && RK_DRM_GRALLOC)
+    src_buf_w = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_FORMAT);
+#else
+    src_buf_w = hwc_get_handle_width(gralloc,fb_target->handle);
+    src_buf_h = hwc_get_handle_height(gralloc,fb_target->handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc,fb_target->handle);
+    src_buf_format = hwc_get_handle_format(gralloc,fb_target->handle);
+#endif
+
+    src_l = (int)fb_target->sourceCropf.left;
+    src_t = (int)fb_target->sourceCropf.top;
+    src_w = (int)(fb_target->sourceCropf.right - fb_target->sourceCropf.left);
+    src_h = (int)(fb_target->sourceCropf.bottom - fb_target->sourceCropf.top);
+
+    dst_l = (int)fb_target->displayFrame.left;
+    dst_t = (int)fb_target->displayFrame.top;
+    dst_w = (int)(fb_target->displayFrame.right - fb_target->displayFrame.left);
+    dst_h = (int)(fb_target->displayFrame.bottom - fb_target->displayFrame.top);
+
+
+    if(dst_w < 0 || dst_h <0 )
+      ALOGE("RGA invalid dst_w=%d,dst_h=%d",dst_w,dst_h);
+
+    dst_stride = rgaBuffer.buffer()->getStride();
+
+    src.sync_mode = RGA_BLIT_SYNC;
+    rga_set_rect(&src.rect,
+                src_l, src_t, src_w, src_h,
+                src_buf_stride, src_buf_h, HAL_PIXEL_FORMAT_RGBA_8888);
+    rga_set_rect(&dst.rect, dst_l, dst_t,  dst_w, dst_h, hd->framebuffer_width, hd->framebuffer_height, HAL_PIXEL_FORMAT_YCrCb_NV12);
+    ALOGD("RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+        src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+        dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+    ALOGD("RK_RGA_PREPARE_SYNC rgaRotateScale : src hnd=%p,dst hnd=%p, format=0x%x, transform=0x%x\n",
+        (void*)fb_target->handle, (void*)(rgaBuffer.buffer()->handle), src_buf_format, rga_transform);
+
+    src.hnd = fb_target->handle;
+    dst.hnd = rgaBuffer.buffer()->handle;
+    src.rotation = rga_transform;
+
+    RockchipRga& rkRga(RockchipRga::get());
+    ret = rkRga.RkRgaBlit(&src, &dst, NULL);
+    if(ret) {
+        ALOGE("rgaRotateScale error : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+            src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+            dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+        ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
+            strerror(errno), (void*)fb_target->handle, (void*)(rgaBuffer.buffer()->handle));
+    }
+
+    DumpLayer("rga", dst.hnd);
+
+    return ret;
+}
+
+int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
+  return 0;
+}
+int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
+
+  int src_data;
+  char  g0,g3;
+  char *temp_dst = (char *)gray16_buffer;
+
+  char value[PROPERTY_VALUE_MAX];
+  property_get("debug.gray", value, "0");
+  int new_value = 0;
+  new_value = atoi(value);
+  if(new_value == 0){
+      for(int i = 0; i < h;i++){
+          for(int j = 0; j< w / 2;j++){
+              src_data = *gray256_addr++;
+              g0 =  (src_data&0xf0)>>4;
+              src_data = *gray256_addr++;
+              g3 =  src_data&0xf0;
+              *temp_dst++ = g0|g3;
+          }
+          gray256_addr += (vir_w - w);
+      }
+  }else if(new_value == 1)
+  {
+      int i = 0, j = 0;
+      for(i = 0; i < ebc_buf_info.fb_height;i++){
+          for(j = 0; j<ebc_buf_info.fb_width / 4;j++){
+              g0 =  (src_data&0xf0)>>4;
+              src_data = *gray256_addr++;
+              g3 =  src_data&0xf0;
+              src_data = *gray256_addr++;
+              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
+          }
+          for(j = ebc_buf_info.fb_width / 4; j<ebc_buf_info.fb_width / 2;j++){
+              g0 =  (src_data&0xf0)>>4;
+              src_data = *gray256_addr++;
+              g3 =  src_data&0xf0;
+              src_data = *gray256_addr++;
+              *temp_dst++ = g0|g3;
+          }
+          gray256_addr += (vir_w - w);
+      }
+
+  }else{
+      for(int i = 0; i < ebc_buf_info.fb_height;i++){
+          for(int j = 0; j<ebc_buf_info.fb_width / 2;j++){
+              g0 =  (src_data&0xf0)>>4;
+              src_data = *gray256_addr++;
+              g3 =  src_data&0xf0;
+              src_data = *gray256_addr++;
+              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
+          }
+          gray256_addr += (vir_w - w);
+      }
+
+  }
+
+  return 0;
+
+}
+int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
+  int ret = 0;
+  struct timeval tpend1,tpend2,tpend3, tpend4, tpend5;
+  long usec1 = 0;
+  gettimeofday(&tpend1, NULL);
+
+  ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, hd->rgaBuffer_index);
+
+  DrmRgaBuffer &gra256_buffer = hd->rgaBuffers[hd->rgaBuffer_index];
+  if (!gra256_buffer.Allocate(hd->framebuffer_width, hd->framebuffer_height, HAL_PIXEL_FORMAT_YCrCb_NV12)) {
+    ALOGE("Failed to allocate rga buffer with size %dx%d", hd->framebuffer_width, hd->framebuffer_height);
+    return -ENOMEM;
+  }
+  ret = hwc_rgba888_to_gray256(gra256_buffer, fb_target, hd);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+
+  //Get virtual address
+  const gralloc_module_t *gralloc;
+  ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                    (const hw_module_t **)&gralloc);
+  if (ret) {
+      ALOGE("Failed to open gralloc module");
+      return ret;
+  }
+
+
+  char* gray256_addr;
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = gra256_buffer.buffer()->handle;
+
+#if (!RK_PER_MODE && RK_DRM_GRALLOC)
+  width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
+#else
+  width = hwc_get_handle_width(gralloc,src_hnd);
+  height = hwc_get_handle_height(gralloc,src_hnd);
+  stride = hwc_get_handle_stride(gralloc,src_hnd);
+  byte_stride = hwc_get_handle_byte_stride(gralloc,src_hnd);
+  format = hwc_get_handle_format(gralloc,src_hnd);
+  size = hwc_get_handle_size(gralloc,src_hnd);
+#endif
+
+
+  gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                  0, 0, width, height, (void **)&gray256_addr);
+
+
+  int *gray16_buffer;
+  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+  int *gray16_buffer_bak = gray16_buffer;
+  Region updateRegion;
+  Region currentA2Region;
+
+  int epdMode;
+
+  epdMode = gCurrentEpdMode;
+  gCurrentEpdMode = gResetEpdMode;
+  if(epdMode == EPD_NULL){
+    ALOGE("Can't set epd EPD_NULL mode");
+    gralloc->unlock(gralloc, src_hnd);
+    free(gray16_buffer);
+    return -1;
+  }
+  char value[PROPERTY_VALUE_MAX];
+  property_get("debug.mode", value, "0");
+  int new_value = 0;
+  new_value = atoi(value);
+  epdMode = new_value;
+
+  
+  if(epdMode == EPD_FULL || epdMode == EPD_BLOCK) 
+  {
+      currentA2Region.clear();
+  }
+
+  if(!currentA2Region.isEmpty() || !gLastA2Region.isEmpty()) 
+  {
+      epdMode = EPD_A2;
+  }
+  else if(epdMode == EPD_A2) 
+  {
+      epdMode = EPD_PART;
+  }
+  
+//  if (epdMode != EPD_A2) 
+//  {
+//    if (epdMode == EPD_FULL_DITHER) 
+//    {
+//        gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+//    } 
+//    else 
+//    {
+//        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);           
+//    }
+//  }
+  gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+
+
+  gettimeofday(&tpend2, NULL);
+  usec1 = 1000 * (tpend2.tv_sec - tpend1.tv_sec) + (tpend2.tv_usec - tpend1.tv_usec) / 1000;
+  ALOGD("DEBUG_lb 2 cost_time=%ld ms\n", usec1);
+
+  if(ioctl(ebc_fd, GET_EBC_BUFFER,&ebc_buf_info)!=0)
+  {
+     ALOGD("GET_EBC_BUFFER failed\n");
+    return -1;  
+  }
+  gettimeofday(&tpend3, NULL);
+  usec1 = 1000 * (tpend3.tv_sec - tpend2.tv_sec) + (tpend3.tv_usec - tpend2.tv_usec) / 1000;
+  ALOGD("DEBUG_lb 333 cost_time=%ld ms\n", usec1);
+
+  gettimeofday(&tpend4, NULL);
+  usec1 = 1000 * (tpend4.tv_sec - tpend3.tv_sec) + (tpend4.tv_usec - tpend3.tv_usec) / 1000;
+  ALOGD("y8 => y4 cost_time=%ld ms\n", usec1);
+
+  ebc_buf_info.win_x1 = 0;
+  ebc_buf_info.win_x2 = ebc_buf_info.width;
+  ebc_buf_info.win_y1 = 0;
+  ebc_buf_info.win_y2 = ebc_buf_info.height;
+  ebc_buf_info.epd_mode = epdMode;
+
+  ALOGD("DEBUG_lb vaddr = %p \n",ebc_buffer_base);
+  ALOGD("DEBUG_lb w = %d, h = %d, ebc_buf_info.rotate = %d\n",ebc_buf_info.vir_width,ebc_buf_info.vir_height,ebc_buf_info.rotate);
+  ALOGD("DEBUG_lb offset = %d\n",ebc_buf_info.offset);
+  unsigned long vaddr_real = intptr_t(ebc_buffer_base);
+  memcpy((void *)(vaddr_real + ebc_buf_info.offset), gray16_buffer_bak, 
+          ebc_buf_info.vir_height * ebc_buf_info.vir_width >> 1);
+
+
+  gettimeofday(&tpend5, NULL);
+  usec1 = 1000 * (tpend5.tv_sec - tpend4.tv_sec) + (tpend5.tv_usec - tpend4.tv_usec) / 1000;
+  ALOGD("memcpy cost_time=%ld ms\n", usec1);
+  if(ioctl(ebc_fd, SET_EBC_SEND_BUFFER,&ebc_buf_info)!=0)
+  {
+     ALOGD("SET_EBC_SEND_BUFFER failed\n");
+  }
+
+  gralloc->unlock(gralloc, src_hnd);
+  free(gray16_buffer_bak);
+  gray16_buffer_bak = NULL;
+  gettimeofday(&tpend4, NULL);
+  usec1 = 1000 * (tpend4.tv_sec - tpend1.tv_sec) + (tpend4.tv_usec - tpend1.tv_usec) / 1000;
+  ALOGD("total cost_time=%ld ms\n", usec1);
+
+
+
+  return 0;
+}
+
+void hwc_free_buffer(hwc_drm_display_t *hd) {
+    for(int i = 0; i < MaxRgaBuffers; i++) {
+        hd->rgaBuffers[i].Clear();
+    }
+}
+#endif
+
+
 static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
                    hwc_display_contents_1_t **sf_display_contents) {
   ATRACE_CALL();
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   int ret = 0;
+  inc_frame();
+  char value[PROPERTY_VALUE_MAX];
+  property_get("debug.enable", value, "0");
+  int new_value = 0;
+  new_value = atoi(value);
+    if(new_value > 0){
+    for (size_t i = 0; i < num_displays; ++i) {
+        hwc_display_contents_1_t *dc = sf_display_contents[i];
 
- inc_frame();
+    if (!sf_display_contents[i])
+      continue;
 
+      size_t num_dc_layers = dc->numHwLayers;
+
+      for (size_t j = 0; j < num_dc_layers; ++j) {
+        hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
+        dump_layer(ctx->gralloc, true, sf_layer, j);
+        if (sf_layer != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
+          if(sf_layer->acquireFenceFd > 0)
+          {
+              sync_wait(sf_layer->acquireFenceFd, -1);
+              close(sf_layer->acquireFenceFd);
+              sf_layer->acquireFenceFd = -1;
+          }
+          if(ctx->drm.isSupportRkRga())
+          {
+            ret = hwc_set_epd(&hwc_info,sf_layer);
+            if (ret)
+            {
+              hwc_free_buffer(&hwc_info);
+              return ret;
+            }
+          }
+        }
+      }
+    }
+  }else{
+    for (size_t i = 0; i < num_displays; ++i) {
+            hwc_display_contents_1_t *dc = sf_display_contents[i];
+      if (!sf_display_contents[i])
+        continue;
+      size_t num_dc_layers = dc->numHwLayers;
+      for (size_t j = 0; j < num_dc_layers; ++j) {
+        hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
+        dump_layer(ctx->gralloc, true, sf_layer, j);
+        if (sf_layer != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
+          if(sf_layer->acquireFenceFd > 0){
+            sync_wait(sf_layer->acquireFenceFd, -1);
+            close(sf_layer->acquireFenceFd);
+            sf_layer->acquireFenceFd = -1;
+          }
+        }
+      }
+    }
+  }
+  return 0;
+#if 0
   std::vector<CheckedOutputFd> checked_output_fences;
   std::vector<DrmHwcDisplayContents> displays_contents;
   std::vector<DrmCompositionDisplayLayersMap> layers_map;
@@ -2998,6 +3544,11 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
       continue;
     }
     hwc_drm_display_t *hd = &ctx->displays[c->display()];
+
+    DrmCrtc *crtc = ctx->drm.GetCrtcFromConnector(c);
+    int fbSize = hd->framebuffer_width * hd->framebuffer_height;
+    DrmHwcDisplayContents &layer_content = ctx->layer_contents.back();
+    DrmCompositionDisplayPlane &comp_plane = ctx->comp_plane_group.back();
 
     std::ostringstream display_index_formatter;
     display_index_formatter << "retire fence for display " << i;
@@ -3311,6 +3862,11 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
       if (layer->flags & HWC_SKIP_LAYER)
         continue;
       hwc_add_layer_to_retire_fence(layer, dc);
+	  if(i == 1 && !(layer->compositionType == HWC_FRAMEBUFFER_TARGET) && layer->releaseFenceFd < 0)
+       {
+          hwc_layer_1_t *layer_1 = &dc->hwLayers[0];
+           layer->releaseFenceFd = dup(layer_1->releaseFenceFd);
+       }
     }
   }
 
@@ -3347,6 +3903,7 @@ err:
     }
     ctx->drm.ClearAllDisplay();
     return -EINVAL;
+#endif
 }
 
 static int hwc_event_control(struct hwc_composer_device_1 *dev, int display,
@@ -3470,6 +4027,14 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
   if (!num_configs)
     return 0;
 
+  uint32_t width = 0, height = 0 , vrefresh = 0 ;
+
+  width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 16);
+  height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  hwc_info.framebuffer_width = width;
+  hwc_info.framebuffer_height = height;
+  hwc_info.vrefresh = vrefresh ? vrefresh : 60;
+#if 0
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   DrmConnector *connector = ctx->drm.GetConnectorFromType(display);
   if (!connector) {
@@ -3511,6 +4076,8 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
   }
 
   sscanf(framebuffer_size, "%dx%d@%d", &width, &height, &vrefresh);
+
+  vrefresh = 60;
   if (width && height) {
     hd->framebuffer_width = width;
     hd->framebuffer_height = height;
@@ -3537,8 +4104,9 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
   hd->rel_yres = mode.v_display();
   hd->v_total = mode.v_total();
 
-  *num_configs = 1;
-  configs[0] = connector->display();
+#endif
+  *num_configs = 14;
+  configs[0] = 0;
 
   return 0;
 }
@@ -3561,6 +4129,36 @@ static int hwc_get_display_attributes(struct hwc_composer_device_1 *dev,
                                       const uint32_t *attributes,
                                       int32_t *values) {
   UN_USED(config);
+
+  uint32_t mm_width = 0;
+  uint32_t mm_height = 0;
+  int w = hwc_info.framebuffer_width;
+  int h = hwc_info.framebuffer_height;
+  int vrefresh = hwc_info.vrefresh;
+
+  for (int i = 0; attributes[i] != HWC_DISPLAY_NO_ATTRIBUTE; ++i) {
+    switch (attributes[i]) {
+      case HWC_DISPLAY_VSYNC_PERIOD:
+        values[i] = 1000 * 1000 * 1000 / vrefresh;
+        break;
+      case HWC_DISPLAY_WIDTH:
+        values[i] = w;
+        break;
+      case HWC_DISPLAY_HEIGHT:
+        values[i] = h;
+        break;
+      case HWC_DISPLAY_DPI_X:
+        /* Dots per 1000 inches */
+        values[i] = mm_width ? (w * UM_PER_INCH) / mm_width : getDefaultDensity(w,h)*1000;
+        break;
+      case HWC_DISPLAY_DPI_Y:
+        /* Dots per 1000 inches */
+        values[i] =
+            mm_height ? (h * UM_PER_INCH) / mm_height : getDefaultDensity(w,h)*1000;
+        break;
+    }
+  }
+#if  0
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   DrmConnector *c = ctx->drm.GetConnectorFromType(display);
   if (!c) {
@@ -3598,6 +4196,7 @@ static int hwc_get_display_attributes(struct hwc_composer_device_1 *dev,
         break;
     }
   }
+#endif
   return 0;
 }
 
@@ -3605,7 +4204,7 @@ static int hwc_get_active_config(struct hwc_composer_device_1 *dev,
                                  int display) {
   UN_USED(dev);
   UN_USED(display);
-  return 0;
+  return gCurrentEpdMode;
 }
 
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
@@ -3613,6 +4212,9 @@ static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
 
   UN_USED(index);
+  gCurrentEpdMode = index;
+  ALOGD("DEBUG_lb hwc_set_active_config mode = %d",index);
+#if 0
   DrmConnector *c = ctx->drm.GetConnectorFromType(display);
   if (!c) {
     ALOGE("%s:Failed to get connector for display %d line=%d", __FUNCTION__,display,__LINE__);
@@ -3642,7 +4244,7 @@ static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
 
   c->set_current_mode(mode);
   ctx->drm.UpdateDisplayRoute();
-
+#endif
   return 0;
 }
 
@@ -3929,6 +4531,21 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
     {
          ALOGE("Open hdmi_status_fd fail in %s",__FUNCTION__);
          //return -1;
+    }
+
+
+    
+    ebc_fd = open("/dev/ebc", O_RDWR,0);
+    if (ebc_fd < 0){
+        ALOGD("DEBUG_lb open /dev/ebc failed\n");
+    }
+    
+    if(ioctl(ebc_fd, GET_EBC_BUFFER_INFO,&ebc_buf_info)!=0){
+        ALOGD("DEBUG_lb GET_EBC_BUFFER failed\n");
+    }
+    ebc_buffer_base = mmap(0, ebc_buf_info.vir_width*ebc_buf_info.vir_height*2, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
+    if (ebc_buffer_base == MAP_FAILED) {
+        ALOGD ("DEBUG_lb Error mapping the ebc buffer (%s)\n", strerror(errno));
     }
 
 #if RK_CTS_WORKROUND

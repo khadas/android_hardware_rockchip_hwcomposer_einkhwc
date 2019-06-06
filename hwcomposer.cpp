@@ -93,6 +93,7 @@
 #include <ui/Region.h>
 #include <ui/GraphicBufferMapper.h>
 
+
 #define UM_PER_INCH 25400
 
 namespace android {
@@ -3202,7 +3203,193 @@ int hwc_rgba888_to_gray256(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t *fb_target,hwc_
     return ret;
 }
 
+#define CLIP(x) (((x) > 255) ? 255 : (x))
+void Luma8bit_to_4bit_row_16(int  *src,  int *dst, short int *res0,  short int*res1, int w)
+{
+    int i;
+    int g0, g1, g2,g3,g4,g5,g6,g7,g_temp;
+    int e;
+    int v0, v1, v2, v3;
+    int src_data;
+    int src_temp_data;
+    v0 = 0;
+    for(i=0; i<w; i+=8)
+    {
+
+        src_data =  *src++;
+        src_temp_data = src_data&0xff;
+        g_temp = src_temp_data + res0[i] + v0;
+        res0[i] = 0;
+        g_temp = CLIP(g_temp);
+        g0 = g_temp & 0xf0;
+        e = g_temp - g0;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+
+        if( i==0 )
+        {
+            res1[i] += v2;
+            res1[i+1] += v3;
+        }
+        else
+        {
+            res1[i-1] += v1;
+            res1[i]   += v2;
+            res1[i+1] += v3;
+        }
+
+
+
+        src_temp_data = ((src_data&0x0000ff00)>>8);
+        g_temp = src_temp_data + res0[i+1] + v0;
+        res0[i+1] = 0;
+        g_temp = CLIP(g_temp);
+        g1 = g_temp & 0xf0;
+        e = g_temp - g1;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i]     += v1;
+        res1[i+1]   += v2;
+        res1[i+2]   += v3;
+
+
+
+
+        src_temp_data = ((src_data&0x00ff0000)>>16);
+        g_temp = src_temp_data + res0[i+2] + v0;
+        res0[i+2] = 0;
+        g_temp = CLIP(g_temp);
+        g2 = g_temp & 0xf0;
+        e = g_temp - g2;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+1]     += v1;
+        res1[i+2]   += v2;
+        res1[i+3]   += v3;
+
+
+        src_temp_data = ((src_data&0xff000000)>>24);
+        g_temp = src_temp_data + res0[i+3] + v0;
+        res0[i+3] = 0;
+        g_temp = CLIP(g_temp);
+        g3 = g_temp & 0xf0;
+        e = g_temp - g3;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+2]     += v1;
+        res1[i+3]   += v2;
+        res1[i+4]   += v3;
+
+
+        src_data =  *src++;
+        src_temp_data = src_data&0xff;
+        g_temp = src_temp_data + res0[i+4] + v0;
+        res0[i+4] = 0;
+        g_temp = CLIP(g_temp);
+        g4 = g_temp & 0xf0;
+        e = g_temp - g4;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+
+        {
+            res1[i+3] += v1;
+            res1[i+4]   += v2;
+            res1[i+5] += v3;
+        }
+
+
+
+        src_temp_data = ((src_data&0x0000ff00)>>8);
+        g_temp = src_temp_data + res0[i+5] + v0;
+        res0[i+5] = 0;
+        g_temp = CLIP(g_temp);
+        g5 = g_temp & 0xf0;
+        e = g_temp - g5;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+4]     += v1;
+        res1[i+5]   += v2;
+        res1[i+6]   += v3;
+
+
+
+
+        src_temp_data = ((src_data&0x00ff0000)>>16);
+        g_temp = src_temp_data + res0[i+6] + v0;
+        res0[i+6] = 0;
+        g_temp = CLIP(g_temp);
+        g6 = g_temp & 0xf0;
+        e = g_temp - g6;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+5]     += v1;
+        res1[i+6]   += v2;
+        res1[i+7]   += v3;
+
+
+
+
+        src_temp_data = ((src_data&0xff000000)>>24);
+        g_temp = src_temp_data + res0[i+7] + v0;
+        res0[i+7] = 0;
+        g_temp = CLIP(g_temp);
+        g7 = g_temp & 0xf0;
+        e = g_temp - g7;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        if (i == w-8)
+        {
+            res1[i+6] += v1;
+            res1[i+7] += v2;
+        }
+        else
+        {
+            res1[i+6]     += v1;
+            res1[i+7]   += v2;
+            res1[i+8]   += v3;
+        }
+
+        *dst++ =(g7<<24)|(g6<<20)|(g5<<16)|(g4<<12) |(g3<<8)|(g2<<4)|g1|(g0>>4);
+    }
+
+}
+
+
 int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
+
+  int h;
+  int w;
+  short int *line_buffer[2];
+  char *src_buffer;
+  line_buffer[0] =(short int *) malloc(panel_w*2);
+  line_buffer[1] =(short int *) malloc(panel_w*2);
+  memset(line_buffer[0],0,panel_w*2);
+  memset(line_buffer[1],0,panel_w*2);
+
+  for(h = 0;h<panel_h;h++){
+      Luma8bit_to_4bit_row_16((int*)gray256_addr,gray16_buffer,line_buffer[h&1],line_buffer[!(h&1)],panel_w);
+      gray16_buffer = gray16_buffer+panel_w/8;
+      gray256_addr = (char*)(gray256_addr+panel_w);
+  }
+  free(line_buffer[0]);
+  free(line_buffer[1]);
+
   return 0;
 }
 int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
@@ -3264,6 +3451,17 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
   return 0;
 
 }
+
+int gray256_to_gray2_dither_full(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
+  
+  return 0;
+}
+int gray256_to_gray2_dither_region(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
+  
+  return 0;
+}
+
+
 int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   int ret = 0;
   struct timeval tpend1,tpend2,tpend3, tpend4, tpend5;
@@ -3354,20 +3552,19 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   {
       epdMode = EPD_PART;
   }
-  
-//  if (epdMode != EPD_A2) 
-//  {
-//    if (epdMode == EPD_FULL_DITHER) 
-//    {
-//        gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-//    } 
-//    else 
-//    {
-//        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);           
-//    }
-//  }
-  gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-
+  property_get("debug.dither", value, "0");
+  new_value = atoi(value);
+  if (epdMode != EPD_A2)
+  {
+    if (new_value == 1)
+    {
+        gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+    }
+    else
+    {
+        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+    }
+  }
 
   gettimeofday(&tpend2, NULL);
   usec1 = 1000 * (tpend2.tv_sec - tpend1.tv_sec) + (tpend2.tv_usec - tpend1.tv_usec) / 1000;
@@ -3438,7 +3635,9 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   property_get("debug.enable", value, "0");
   int new_value = 0;
   new_value = atoi(value);
-    if(new_value > 0){
+  property_get("service.bootanim.exit", value, "0");
+  int bootanim = atoi(value);
+    if(bootanim > 0 && new_value > 0){
     for (size_t i = 0; i < num_displays; ++i) {
         hwc_display_contents_1_t *dc = sf_display_contents[i];
 
@@ -3924,7 +4123,9 @@ static int hwc_event_control(struct hwc_composer_device_1 *dev, int display,
 static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
                               int mode) {
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
+  ALOGD("DEBUG_lb %s,line = %d , display = %d ,mode = %d",__FUNCTION__,__LINE__,display,mode);
 
+#if 0
   uint64_t dpmsValue = 0;
   switch (mode) {
     case HWC_POWER_MODE_OFF:
@@ -3987,7 +4188,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
   ctx->drm.DisplayChanged();
   ctx->drm.UpdateDisplayRoute();
   ctx->drm.ClearDisplay();
-
+#endif
   return 0;
 }
 

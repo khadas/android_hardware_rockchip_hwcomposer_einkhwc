@@ -3451,13 +3451,107 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
   return 0;
 
 }
+void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short int*res1, int w,int threshold)
+{
+    int i;
+    int g0, g1, g2,g3,g4,g5,g6,g7,g_temp;
+    int e;
+    int v0, v1, v2, v3;
+    int src_data;
+    int src_temp_data;
+    v0 = 0;
+    for(i=0; i<w; i+=2)
+    {
 
-int gray256_to_gray2_dither_full(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
-  
-  return 0;
+        src_data =  *src++;
+        src_temp_data = src_data&0xff;
+        g_temp = src_temp_data + res0[i] + v0;
+        res0[i] = 0;
+        g_temp = CLIP(g_temp);
+        g0 = g_temp & 0x80;
+        e = g_temp - g0;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        if(g_temp >= threshold)
+            g0 = 0x0f;
+        else
+            g0 = 0x00;
+        if( i==0 )
+        {   
+            res1[i] += v2;
+            res1[i+1] += v3;
+        }
+        else
+        {
+            res1[i-1] += v1;
+            res1[i]   += v2;
+            res1[i+1] += v3;
+        }
+
+
+
+        src_temp_data = ((src_data&0x0000ff00)>>8);
+        g_temp = src_temp_data + res0[i+1] + v0;
+        res0[i+1] = 0;
+        g_temp = CLIP(g_temp);
+        g1 = g_temp & 0x80;
+        e = g_temp - g1;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        if(g_temp >= threshold)
+            g1 = 0x0f;
+        else
+            g1 = 0x00;
+        res1[i]     += v1;
+        res1[i+1]   += v2;
+        res1[i+2]   += v3;
+
+        *dst++ =(g1<<4)|(g0);
+    }
+
 }
-int gray256_to_gray2_dither_region(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
+
+int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, int panel_w,int vir_width,Region region){
   
+    //do dither
+    short int *line_buffer[2];
+    line_buffer[0] =(short int *) malloc(panel_w << 1);
+    line_buffer[1] =(short int *) malloc(panel_w << 1);
+
+    size_t count = 0;
+    const Rect* rects = region.getArray(&count);
+    ALOGD("DEBUG_lb gray256_to_gray2_dither Rect w=%d,h=%d count = %d,",rects[0].right - rects[0].left,rects[0].bottom - rects[0].top,count);
+    for (int i = 0;i < (int)count;i++) {
+        memset(line_buffer[0], 0, panel_w << 1);
+        memset(line_buffer[1], 0, panel_w << 1);
+
+        int w = rects[i].right - rects[i].left;
+        int offset = rects[i].top * panel_w + rects[i].left;
+        int offset_dst = rects[i].top * vir_width + rects[i].left;
+        if (offset_dst % 2) {
+            offset_dst += (2 - offset_dst % 2);
+        }
+        if (offset % 2) {
+            offset += (2 - offset % 2);
+        }
+        if ((offset_dst + w) % 2) {
+            w -= (offset_dst + w) % 2;  
+        }
+        for (int h = rects[i].top;h <= rects[i].bottom && h < panel_h;h++) {
+            //ALOGD("DEBUG_lb Luma8bit_to_4bit_row_2, w:%d, offset:%d, offset_dst:%d", w, offset, offset_dst);
+            Luma8bit_to_4bit_row_2((short int*)(gray256_addr + offset), (char *)(gray2_buffer + (offset_dst >> 1)), 
+                    line_buffer[h&1], line_buffer[!(h&1)], w, 0xff);
+            offset += panel_w;
+            offset_dst += vir_width;
+        }
+    }
+
+    free(line_buffer[0]);
+    free(line_buffer[1]);
   return 0;
 }
 
@@ -3556,12 +3650,13 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   new_value = atoi(value);
   if (epdMode != EPD_A2)
   {
-    if (new_value == 1)
-    {
+    if(new_value == 2){
+        Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+        gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
+    }else if (new_value == 1){
         gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
     }
-    else
-    {
+    else{
         gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
     }
   }
@@ -3637,7 +3732,22 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   new_value = atoi(value);
   property_get("service.bootanim.exit", value, "0");
   int bootanim = atoi(value);
-    if(bootanim > 0 && new_value > 0){
+
+
+
+  int disable_epd = false;
+  switch (gCurrentEpdMode) {
+    case HWC_POWER_MODE_EPD_BLOCK:
+    case HWC_POWER_MODE_EPD_STANDBY:
+    case HWC_POWER_MODE_EPD_POWEROFF:
+      disable_epd = true;
+      break;
+    case HWC_POWER_MODE_NORMAL:
+      disable_epd = false;
+      break;
+  };
+
+    if(!disable_epd && bootanim > 0 && new_value > 0){
     for (size_t i = 0; i < num_displays; ++i) {
         hwc_display_contents_1_t *dc = sf_display_contents[i];
 
@@ -4124,7 +4234,57 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
                               int mode) {
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   ALOGD("DEBUG_lb %s,line = %d , display = %d ,mode = %d",__FUNCTION__,__LINE__,display,mode);
-
+  switch (mode) {
+    case HWC_POWER_MODE_EPD_NULL:
+      gCurrentEpdMode = EPD_NULL;
+      break;
+    case HWC_POWER_MODE_EPD_AUTO:
+      gCurrentEpdMode = EPD_AUTO;
+      break;
+    case HWC_POWER_MODE_EPD_FULL:
+      gCurrentEpdMode = EPD_FULL;
+      break;
+    case HWC_POWER_MODE_EPD_A2:
+      gCurrentEpdMode = EPD_A2;
+      break;
+    case HWC_POWER_MODE_EPD_PART:
+      gCurrentEpdMode = EPD_PART;
+      break;
+    case HWC_POWER_MODE_EPD_FULL_DITHER:
+      gCurrentEpdMode = EPD_FULL_DITHER;
+      break;
+    case HWC_POWER_MODE_EPD_RESET:
+      gCurrentEpdMode = EPD_RESET;
+      break;
+    case HWC_POWER_MODE_EPD_BLACK_WHITE:
+      gCurrentEpdMode = EPD_BLACK_WHITE;
+      break;
+    case HWC_POWER_MODE_EPD_TEXT:
+      gCurrentEpdMode = EPD_TEXT;
+      break;
+    case HWC_POWER_MODE_EPD_BLOCK:
+      gCurrentEpdMode = EPD_BLOCK;
+      break;
+    case HWC_POWER_MODE_EPD_FULL_WIN:
+      gCurrentEpdMode = EPD_FULL_WIN;
+      break;
+    case HWC_POWER_MODE_EPD_OED_PART:
+      gCurrentEpdMode = EPD_OED_PART;
+      break;
+    case HWC_POWER_MODE_EPD_DIRECT_PART:
+      gCurrentEpdMode = EPD_DIRECT_PART;
+      break;
+    case HWC_POWER_MODE_EPD_DIRECT_A2:
+      gCurrentEpdMode = EPD_DIRECT_A2;
+      break;
+    case HWC_POWER_MODE_EPD_STANDBY:
+      gCurrentEpdMode = EPD_STANDBY;
+      break;
+    case HWC_POWER_MODE_EPD_POWEROFF:
+      gCurrentEpdMode = EPD_POWEROFF;
+      
+      break;
+  };
 #if 0
   uint64_t dpmsValue = 0;
   switch (mode) {

@@ -49,7 +49,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libsync \
 	libui \
 	libutils \
-	librga
+        librga \
+        libmpp
 
 LOCAL_STATIC_LIBRARIES := \
 	libtinyxml2
@@ -62,7 +63,9 @@ LOCAL_C_INCLUDES := \
 	system/core/include/utils \
 	system/core/libsync \
 	system/core/libsync/include \
-	hardware/rockchip/librga
+	hardware/rockchip/librga \
+        $(LOCAL_PATH)/JpgDecoder/inc/mpp_inc/ \
+        $(LOCAL_PATH)/JpgDecoder/inc
 
 LOCAL_SRC_FILES := \
 	autolock.cpp \
@@ -90,7 +93,10 @@ LOCAL_SRC_FILES := \
 	worker.cpp \
         hwc_util.cpp \
         hwc_rockchip.cpp \
-        hwc_debug.cpp
+        hwc_debug.cpp \
+        JpgDecoder/mpi/Utils.cpp \
+        JpgDecoder/mpi/MpiJpegEncoder.cpp \
+        JpgDecoder/mpi/MpiJpegDecoder.cpp
 
 ifeq ($(strip $(BOARD_DRM_HWCOMPOSER_BUFFER_IMPORTER)),nvidia-gralloc)
 LOCAL_CPPFLAGS += -DUSE_NVIDIA_IMPORTER
@@ -381,5 +387,5 @@ LOCAL_MODULE_RELATIVE_PATH := hw
 LOCAL_MODULE_CLASS := SHARED_LIBRARIES
 LOCAL_MODULE_SUFFIX := $(TARGET_SHLIB_SUFFIX)
 include $(BUILD_SHARED_LIBRARY)
-
 endif
+

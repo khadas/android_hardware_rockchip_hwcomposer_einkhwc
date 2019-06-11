@@ -93,6 +93,9 @@
 #include <ui/Region.h>
 #include <ui/GraphicBufferMapper.h>
 
+//Image jpg decoder
+#include "MpiJpegDecoder.h"
+
 
 #define UM_PER_INCH 25400
 
@@ -117,20 +120,20 @@ namespace android {
 #define EPD_POWEROFF        (14)
 /*android use struct*/
 struct ebc_buf_info{
-	int offset;
-	int epd_mode;
-	int height;
-	int width;
-	int vir_height;
-	int vir_width;
-	int fb_width;
-	int fb_height;
-	int color_panel;
-	int win_x1;
-	int win_y1;
-	int win_x2;
-	int win_y2;
-	int rotate;
+  int offset;
+  int epd_mode;
+  int height;
+  int width;
+  int vir_height;
+  int vir_width;
+  int fb_width;
+  int fb_height;
+  int color_panel;
+  int win_x1;
+  int win_y1;
+  int win_x2;
+  int win_y2;
+  int rotate;
 }__packed;
 struct win_coordinate{
 	int x1;
@@ -155,6 +158,7 @@ static int gPixel_format = 24;
 void *ebc_buffer_base = NULL;
 int ebc_fd = -1;
 struct ebc_buf_info ebc_buf_info;
+static int gLastEpdMode = EPD_PART;
 static int gCurrentEpdMode = EPD_PART;
 static int gResetEpdMode = EPD_PART;
 static struct region_buffer_t gCurrentA2Region;
@@ -2353,6 +2357,7 @@ static hwc_drm_display_t hwc_info;
 static int hwc_prepare(hwc_composer_device_1_t *dev, size_t num_displays,
                        hwc_display_contents_1_t **display_contents) {
 
+   UN_USED(dev);
    for (int i = 0; i < (int)num_displays; ++i) {
       if (!display_contents[i])
         continue;
@@ -3373,6 +3378,7 @@ void Luma8bit_to_4bit_row_16(int  *src,  int *dst, short int *res0,  short int*r
 
 int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
 
+  UN_USED(vir_width);
   int h;
   int w;
   short int *line_buffer[2];
@@ -3555,12 +3561,36 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
   return 0;
 }
 
+int hwc_post_epd(int *buffer, Rect rect, int mode){
+
+  struct ebc_buf_info buf_info;
+
+  if(ioctl(ebc_fd, GET_EBC_BUFFER,&buf_info)!=0)
+  {
+     ALOGD("GET_EBC_BUFFER failed\n");
+    return -1;
+  }
+
+  buf_info.win_x1 = rect.left;
+  buf_info.win_x2 = rect.right;
+  buf_info.win_y1 = rect.top;
+  buf_info.win_y2 = rect.bottom;
+  buf_info.epd_mode = mode;
+
+  unsigned long vaddr_real = intptr_t(ebc_buffer_base);
+  memcpy((void *)(vaddr_real + buf_info.offset), buffer,
+          buf_info.vir_height * buf_info.vir_width >> 1);
+
+  if(ioctl(ebc_fd, SET_EBC_SEND_BUFFER,&buf_info)!=0)
+  {
+     ALOGD("SET_EBC_SEND_BUFFER failed\n");
+     return -1;
+  }
+  return 0;
+}
 
 int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   int ret = 0;
-  struct timeval tpend1,tpend2,tpend3, tpend4, tpend5;
-  long usec1 = 0;
-  gettimeofday(&tpend1, NULL);
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, hd->rgaBuffer_index);
 
@@ -3583,7 +3613,6 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
       ALOGE("Failed to open gralloc module");
       return ret;
   }
-
 
   char* gray256_addr;
   int width,height,stride,byte_stride,format,size;
@@ -3609,10 +3638,10 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&gray256_addr);
 
-
   int *gray16_buffer;
   gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
   int *gray16_buffer_bak = gray16_buffer;
+
   Region updateRegion;
   Region currentA2Region;
 
@@ -3627,12 +3656,7 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
     return -1;
   }
   char value[PROPERTY_VALUE_MAX];
-  property_get("debug.mode", value, "0");
-  int new_value = 0;
-  new_value = atoi(value);
-  epdMode = new_value;
 
-  
   if(epdMode == EPD_FULL || epdMode == EPD_BLOCK) 
   {
       currentA2Region.clear();
@@ -3647,13 +3671,13 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
       epdMode = EPD_PART;
   }
   property_get("debug.dither", value, "0");
-  new_value = atoi(value);
+  int dither = atoi(value);
   if (epdMode != EPD_A2)
   {
-    if(new_value == 2){
+    if(dither == 2){
         Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
         gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-    }else if (new_value == 1){
+    }else if (dither == 1){
         gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
     }
     else{
@@ -3661,54 +3685,15 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
     }
   }
 
-  gettimeofday(&tpend2, NULL);
-  usec1 = 1000 * (tpend2.tv_sec - tpend1.tv_sec) + (tpend2.tv_usec - tpend1.tv_usec) / 1000;
-  ALOGD("DEBUG_lb 2 cost_time=%ld ms\n", usec1);
 
-  if(ioctl(ebc_fd, GET_EBC_BUFFER,&ebc_buf_info)!=0)
-  {
-     ALOGD("GET_EBC_BUFFER failed\n");
-    return -1;  
-  }
-  gettimeofday(&tpend3, NULL);
-  usec1 = 1000 * (tpend3.tv_sec - tpend2.tv_sec) + (tpend3.tv_usec - tpend2.tv_usec) / 1000;
-  ALOGD("DEBUG_lb 333 cost_time=%ld ms\n", usec1);
-
-  gettimeofday(&tpend4, NULL);
-  usec1 = 1000 * (tpend4.tv_sec - tpend3.tv_sec) + (tpend4.tv_usec - tpend3.tv_usec) / 1000;
-  ALOGD("y8 => y4 cost_time=%ld ms\n", usec1);
-
-  ebc_buf_info.win_x1 = 0;
-  ebc_buf_info.win_x2 = ebc_buf_info.width;
-  ebc_buf_info.win_y1 = 0;
-  ebc_buf_info.win_y2 = ebc_buf_info.height;
-  ebc_buf_info.epd_mode = epdMode;
-
-  ALOGD("DEBUG_lb vaddr = %p \n",ebc_buffer_base);
-  ALOGD("DEBUG_lb w = %d, h = %d, ebc_buf_info.rotate = %d\n",ebc_buf_info.vir_width,ebc_buf_info.vir_height,ebc_buf_info.rotate);
-  ALOGD("DEBUG_lb offset = %d\n",ebc_buf_info.offset);
-  unsigned long vaddr_real = intptr_t(ebc_buffer_base);
-  memcpy((void *)(vaddr_real + ebc_buf_info.offset), gray16_buffer_bak, 
-          ebc_buf_info.vir_height * ebc_buf_info.vir_width >> 1);
-
-
-  gettimeofday(&tpend5, NULL);
-  usec1 = 1000 * (tpend5.tv_sec - tpend4.tv_sec) + (tpend5.tv_usec - tpend4.tv_usec) / 1000;
-  ALOGD("memcpy cost_time=%ld ms\n", usec1);
-  if(ioctl(ebc_fd, SET_EBC_SEND_BUFFER,&ebc_buf_info)!=0)
-  {
-     ALOGD("SET_EBC_SEND_BUFFER failed\n");
-  }
+  //EPD post
+  Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
+  ret = hwc_post_epd(gray16_buffer_bak,rect,epdMode);
 
   gralloc->unlock(gralloc, src_hnd);
   free(gray16_buffer_bak);
   gray16_buffer_bak = NULL;
-  gettimeofday(&tpend4, NULL);
-  usec1 = 1000 * (tpend4.tv_sec - tpend1.tv_sec) + (tpend4.tv_usec - tpend1.tv_usec) / 1000;
-  ALOGD("total cost_time=%ld ms\n", usec1);
-
-
-
+  gray16_buffer = NULL;
   return 0;
 }
 
@@ -3718,6 +3703,67 @@ void hwc_free_buffer(hwc_drm_display_t *hd) {
     }
 }
 #endif
+static void inputJpgLogo(const char src_path[],const char dst_path[], int w, int h)
+{
+/* --------------- jpeg_dec demo ----------------*/
+    MpiJpegDecoder::DecParam param;
+    strcpy(param.input_file, src_path);
+    param.input_width = w;
+    param.input_height = h;
+    /*
+      output format support list:
+         MPP_FMT_YUV420SP
+         MPP_FMT_YUV422SP
+         MPP_FMT_RGB565
+         MPP_FMT_ARGB8888
+    */
+    param.output_fmt = MPP_FMT_YUV420SP;
+    strcpy(param.output_file, dst_path);
+
+    MpiJpegDecoder decoder;
+    if (!decoder.start(param))
+        ALOGE("decode failed");
+    /* --------------------------------------------*/
+
+}
+
+int hwc_post_epd_logo(const char src_path[]){
+  int ret = 0;
+  //NV12 format size = w * h * 1.5
+  char* gray256_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
+  FILE *file = fopen(src_path, "rb");
+  if (!file)
+  {
+      ALOGD("Could not open %s\n",src_path);
+      free(gray256_addr);
+      gray256_addr = NULL;
+      return -1;
+  } else {
+      ALOGD("open %s and read ok\n",src_path);
+      fread(gray256_addr, ebc_buf_info.width*ebc_buf_info.height*1.5, 1, file);
+  }
+  fclose(file);
+
+  int *gray16_buffer;
+  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+  int *gray16_buffer_bak = gray16_buffer;
+
+  gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+
+  //EPD post
+  Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
+  ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_FULL);
+  if(ret)
+    ALOGD("hwc_post_epd fail\n");
+  free(gray256_addr);
+  gray256_addr = NULL;
+
+  free(gray16_buffer_bak);
+  gray16_buffer_bak = NULL;
+  gray16_buffer = NULL;
+  return 0;
+
+}
 
 
 static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
@@ -3728,26 +3774,44 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   inc_frame();
   char value[PROPERTY_VALUE_MAX];
   property_get("debug.enable", value, "0");
-  int new_value = 0;
-  new_value = atoi(value);
+  int epd_enable = atoi(value);
   property_get("service.bootanim.exit", value, "0");
   int bootanim = atoi(value);
+  gLastEpdMode = gCurrentEpdMode;
+  property_get("debug.mode", value, "0");
+  gCurrentEpdMode = atoi(value);
 
-
+  char output_logo_path[100] = {0};
 
   int disable_epd = false;
   switch (gCurrentEpdMode) {
     case HWC_POWER_MODE_EPD_BLOCK:
     case HWC_POWER_MODE_EPD_STANDBY:
+      disable_epd = true;
+      if(gLastEpdMode != gCurrentEpdMode){
+        sprintf(output_logo_path,"/data/standby-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
+        inputJpgLogo("/system/media/standby.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
+        hwc_post_epd_logo(output_logo_path);
+      }
+      break;
     case HWC_POWER_MODE_EPD_POWEROFF:
       disable_epd = true;
+      if(gLastEpdMode != gCurrentEpdMode){
+        gCurrentEpdMode = EPD_POWEROFF;
+        sprintf(output_logo_path,"/data/nopower-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
+        inputJpgLogo("/system/media/nopower.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
+        hwc_post_epd_logo(output_logo_path);
+      }
       break;
-    case HWC_POWER_MODE_NORMAL:
+    case HWC_POWER_MODE_EPD_PART:
+      disable_epd = false;
+      break;
+    default:
       disable_epd = false;
       break;
   };
 
-    if(!disable_epd && bootanim > 0 && new_value > 0){
+  if(!disable_epd && bootanim > 0 && epd_enable > 0){
     for (size_t i = 0; i < num_displays; ++i) {
         hwc_display_contents_1_t *dc = sf_display_contents[i];
 
@@ -4234,6 +4298,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
                               int mode) {
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   ALOGD("DEBUG_lb %s,line = %d , display = %d ,mode = %d",__FUNCTION__,__LINE__,display,mode);
+  char output_logo_path[100] = {0};
   switch (mode) {
     case HWC_POWER_MODE_EPD_NULL:
       gCurrentEpdMode = EPD_NULL;
@@ -4279,10 +4344,15 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       break;
     case HWC_POWER_MODE_EPD_STANDBY:
       gCurrentEpdMode = EPD_STANDBY;
+      sprintf(output_logo_path,"/data/standby-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
+      inputJpgLogo("/system/media/standby.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
+      hwc_post_epd_logo(output_logo_path);
       break;
     case HWC_POWER_MODE_EPD_POWEROFF:
       gCurrentEpdMode = EPD_POWEROFF;
-      
+      sprintf(output_logo_path,"/data/nopower-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
+      inputJpgLogo("/system/media/nopower.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
+      hwc_post_epd_logo(output_logo_path);
       break;
   };
 #if 0
@@ -4373,6 +4443,7 @@ static int hwc_query(struct hwc_composer_device_1 * /* dev */, int what,
 static void hwc_register_procs(struct hwc_composer_device_1 *dev,
                                hwc_procs_t const *procs) {
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
+  UN_USED(dev);
 
   ctx->procs = procs;
 
@@ -4385,6 +4456,8 @@ static void hwc_register_procs(struct hwc_composer_device_1 *dev,
 static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
                                    int display, uint32_t *configs,
                                    size_t *num_configs) {
+  UN_USED(dev);
+  UN_USED(display);
   if (!num_configs)
     return 0;
 
@@ -4490,6 +4563,8 @@ static int hwc_get_display_attributes(struct hwc_composer_device_1 *dev,
                                       const uint32_t *attributes,
                                       int32_t *values) {
   UN_USED(config);
+  UN_USED(display);
+  UN_USED(dev);
 
   uint32_t mm_width = 0;
   uint32_t mm_height = 0;
@@ -4571,7 +4646,7 @@ static int hwc_get_active_config(struct hwc_composer_device_1 *dev,
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
                                  int index) {
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
-
+  UN_USED(display);
   UN_USED(index);
   gCurrentEpdMode = index;
   ALOGD("DEBUG_lb hwc_set_active_config mode = %d",index);

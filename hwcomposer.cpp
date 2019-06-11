@@ -3485,7 +3485,7 @@ void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short
         else
             g0 = 0x00;
         if( i==0 )
-        {   
+        {
             res1[i] += v2;
             res1[i+1] += v3;
         }
@@ -3522,7 +3522,7 @@ void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short
 }
 
 int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, int panel_w,int vir_width,Region region){
-  
+
     //do dither
     short int *line_buffer[2];
     line_buffer[0] =(short int *) malloc(panel_w << 1);
@@ -3545,11 +3545,11 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
             offset += (2 - offset % 2);
         }
         if ((offset_dst + w) % 2) {
-            w -= (offset_dst + w) % 2;  
+            w -= (offset_dst + w) % 2;
         }
         for (int h = rects[i].top;h <= rects[i].bottom && h < panel_h;h++) {
             //ALOGD("DEBUG_lb Luma8bit_to_4bit_row_2, w:%d, offset:%d, offset_dst:%d", w, offset, offset_dst);
-            Luma8bit_to_4bit_row_2((short int*)(gray256_addr + offset), (char *)(gray2_buffer + (offset_dst >> 1)), 
+            Luma8bit_to_4bit_row_2((short int*)(gray256_addr + offset), (char *)(gray2_buffer + (offset_dst >> 1)),
                     line_buffer[h&1], line_buffer[!(h&1)], w, 0xff);
             offset += panel_w;
             offset_dst += vir_width;
@@ -3657,16 +3657,16 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   }
   char value[PROPERTY_VALUE_MAX];
 
-  if(epdMode == EPD_FULL || epdMode == EPD_BLOCK) 
+  if(epdMode == EPD_FULL || epdMode == EPD_BLOCK)
   {
       currentA2Region.clear();
   }
 
-  if(!currentA2Region.isEmpty() || !gLastA2Region.isEmpty()) 
+  if(!currentA2Region.isEmpty() || !gLastA2Region.isEmpty())
   {
       epdMode = EPD_A2;
   }
-  else if(epdMode == EPD_A2) 
+  else if(epdMode == EPD_A2)
   {
       epdMode = EPD_PART;
   }
@@ -4970,12 +4970,12 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
     }
 
 
-    
+
     ebc_fd = open("/dev/ebc", O_RDWR,0);
     if (ebc_fd < 0){
         ALOGD("DEBUG_lb open /dev/ebc failed\n");
     }
-    
+
     if(ioctl(ebc_fd, GET_EBC_BUFFER_INFO,&ebc_buf_info)!=0){
         ALOGD("DEBUG_lb GET_EBC_BUFFER failed\n");
     }

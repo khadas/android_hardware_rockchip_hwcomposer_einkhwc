@@ -149,9 +149,9 @@ struct win_coordinate{
 #define REGION_BUFFER_SIZE 512
 
 
-#define POWEROFF_IMAGE_PATH "/system/media/poweroff.jpg"
-#define NOPOWER_IMAGE_PATH "/system/media/nopower.jpg"
-#define STANDBY_IMAGE_PATH "/system/media/standby.jpg"
+#define POWEROFF_IMAGE_PATH "/vendor/media/poweroff.jpg"
+#define NOPOWER_IMAGE_PATH "/vendor/media/nopower.jpg"
+#define STANDBY_IMAGE_PATH "/vendor/media/standby.jpg"
 
 struct region_buffer_t {
 	int size;

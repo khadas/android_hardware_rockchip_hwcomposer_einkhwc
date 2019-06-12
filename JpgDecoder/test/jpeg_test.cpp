@@ -22,6 +22,12 @@ int main()
     //         MPP_FMT_ARGB8888
     //     */
     //    param.input_fmt = MPP_FMT_YUV420SP;
+    //    /*
+    //      output_type support list:
+    //         OUTPUT_TYPE_FILE
+    //         OUTPUT_TYPE_MEM_ADDR
+    //    */
+    //    param.output_type = OUTPUT_TYPE_FILE;
     //    strcpy(param.output_file, "/data/out.jpg");
 
     //    MpiJpegEncoder encoder;
@@ -42,6 +48,12 @@ int main()
          MPP_FMT_ARGB8888
     */
     param.output_fmt = MPP_FMT_YUV420SP;
+    /*
+      output_type support list:
+        OUTPUT_TYPE_FILE
+        OUTPUT_TYPE_MEM_ADDR
+    */
+    param.output_type = MpiJpegDecoder::OUTPUT_TYPE_FILE;
     strcpy(param.output_file, "/data/raw");
 
     MpiJpegDecoder decoder;

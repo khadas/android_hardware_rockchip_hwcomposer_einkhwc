@@ -148,6 +148,11 @@ struct win_coordinate{
 
 #define REGION_BUFFER_SIZE 512
 
+
+#define POWEROFF_IMAGE_PATH "/system/media/poweroff.jpg"
+#define NOPOWER_IMAGE_PATH "/system/media/nopower.jpg"
+#define STANDBY_IMAGE_PATH "/system/media/standby.jpg"
+
 struct region_buffer_t {
 	int size;
 	char buffer[REGION_BUFFER_SIZE];
@@ -3703,7 +3708,7 @@ void hwc_free_buffer(hwc_drm_display_t *hd) {
     }
 }
 #endif
-static void inputJpgLogo(const char src_path[],const char dst_path[], int w, int h)
+static void inputJpgLogo(const char src_path[],const void *dst, int w, int h)
 {
 /* --------------- jpeg_dec demo ----------------*/
     MpiJpegDecoder::DecParam param;
@@ -3718,7 +3723,9 @@ static void inputJpgLogo(const char src_path[],const char dst_path[], int w, int
          MPP_FMT_ARGB8888
     */
     param.output_fmt = MPP_FMT_YUV420SP;
-    strcpy(param.output_file, dst_path);
+
+    param.output_type = MpiJpegDecoder::OUTPUT_TYPE_MEM_ADDR;
+    param.output_dst = (void *)dst;
 
     MpiJpegDecoder decoder;
     if (!decoder.start(param))
@@ -3730,25 +3737,14 @@ static void inputJpgLogo(const char src_path[],const char dst_path[], int w, int
 int hwc_post_epd_logo(const char src_path[]){
   int ret = 0;
   //NV12 format size = w * h * 1.5
-  char* gray256_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
-  FILE *file = fopen(src_path, "rb");
-  if (!file)
-  {
-      ALOGD("Could not open %s\n",src_path);
-      free(gray256_addr);
-      gray256_addr = NULL;
-      return -1;
-  } else {
-      ALOGD("open %s and read ok\n",src_path);
-      fread(gray256_addr, ebc_buf_info.width*ebc_buf_info.height*1.5, 1, file);
-  }
-  fclose(file);
+  void *gray256_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
+  inputJpgLogo(src_path,(void *)gray256_addr,ebc_buf_info.width,ebc_buf_info.height);
 
   int *gray16_buffer;
   gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
   int *gray16_buffer_bak = gray16_buffer;
 
-  gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+  gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
 
   //EPD post
   Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
@@ -3783,24 +3779,27 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
 
   char output_logo_path[100] = {0};
 
+  char nopower[255];
+
   int disable_epd = false;
   switch (gCurrentEpdMode) {
     case HWC_POWER_MODE_EPD_BLOCK:
     case HWC_POWER_MODE_EPD_STANDBY:
       disable_epd = true;
       if(gLastEpdMode != gCurrentEpdMode){
-        sprintf(output_logo_path,"/data/standby-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
-        inputJpgLogo("/system/media/standby.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
-        hwc_post_epd_logo(output_logo_path);
+        hwc_post_epd_logo(STANDBY_IMAGE_PATH);
       }
       break;
     case HWC_POWER_MODE_EPD_POWEROFF:
       disable_epd = true;
       if(gLastEpdMode != gCurrentEpdMode){
         gCurrentEpdMode = EPD_POWEROFF;
-        sprintf(output_logo_path,"/data/nopower-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
-        inputJpgLogo("/system/media/nopower.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
-        hwc_post_epd_logo(output_logo_path);
+          property_get("sys.shutdown.nopower", nopower, "0");
+          if(atoi(nopower) == 1){
+            hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
+          }else{
+            hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+          }
       }
       break;
     case HWC_POWER_MODE_EPD_PART:
@@ -4296,9 +4295,13 @@ static int hwc_event_control(struct hwc_composer_device_1 *dev, int display,
 
 static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
                               int mode) {
+
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   ALOGD("DEBUG_lb %s,line = %d , display = %d ,mode = %d",__FUNCTION__,__LINE__,display,mode);
   char output_logo_path[100] = {0};
+
+  char nopower[255];
+
   switch (mode) {
     case HWC_POWER_MODE_EPD_NULL:
       gCurrentEpdMode = EPD_NULL;
@@ -4344,15 +4347,16 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       break;
     case HWC_POWER_MODE_EPD_STANDBY:
       gCurrentEpdMode = EPD_STANDBY;
-      sprintf(output_logo_path,"/data/standby-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
-      inputJpgLogo("/system/media/standby.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
-      hwc_post_epd_logo(output_logo_path);
+      hwc_post_epd_logo(STANDBY_IMAGE_PATH);
       break;
     case HWC_POWER_MODE_EPD_POWEROFF:
       gCurrentEpdMode = EPD_POWEROFF;
-      sprintf(output_logo_path,"/data/nopower-w%d-h%d-nv12.bin",ebc_buf_info.width,ebc_buf_info.height);
-      inputJpgLogo("/system/media/nopower.jpg",output_logo_path,ebc_buf_info.width,ebc_buf_info.height);
-      hwc_post_epd_logo(output_logo_path);
+      property_get("sys.shutdown.nopower", nopower, "0");
+      if(atoi(nopower) == 1){
+        hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
+      }else{
+        hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+      }
       break;
   };
 #if 0

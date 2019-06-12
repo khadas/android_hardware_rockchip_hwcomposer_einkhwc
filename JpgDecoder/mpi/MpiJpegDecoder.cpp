@@ -47,11 +47,16 @@ MPP_RET MpiJpegDecoder::initDecCtx(DecLoopData **data, DecParam param)
         ALOGD("input file size %zu", p->file_size);
     }
 
-    p->fp_output = fopen(param.output_file, "w+b");
-    if (NULL == p->fp_output) {
-        ALOGE("failed to open output file %s", param.output_file);
-        ret = MPP_ERR_OPEN_FILE;
-        goto RET;
+    if (param.output_type == OUTPUT_TYPE_FILE) {
+        p->fp_output = fopen(param.output_file, "w+b");
+        if (NULL == p->fp_output) {
+            ALOGE("failed to open output file %s", param.output_file);
+            ret = MPP_ERR_OPEN_FILE;
+            goto RET;
+        }
+    } else if (param.output_type == OUTPUT_TYPE_MEM_ADDR) {
+        p->fp_output = NULL;
+        p->output_dst = param.output_dst;
     }
 
     ret = mpp_buffer_group_get_internal(&p->frm_grp, MPP_BUFFER_TYPE_ION);
@@ -166,9 +171,11 @@ int MpiJpegDecoder::decode_advanced(DecLoopData *data)
         mpp_task_meta_get_frame(task, KEY_OUTPUT_FRAME, &frame_out);
 
         if (frame) {
-            /* write frame to file here */
+            /* write frame to output here */
             if (data->fp_output)
                 dump_mpp_frame_to_file(frame, data->fp_output);
+            else
+                dump_mpp_frame_to_addr(frame, data->output_dst);
 
             data->frame_count++;
             ALOGD("decoded frame %d", data->frame_count);
@@ -351,4 +358,3 @@ MPP_TEST_OUT:
 
     return ret == MPP_OK ? true : false;
 }
-

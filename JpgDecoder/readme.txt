@@ -14,6 +14,12 @@ usgae for libjpeghw.so:
          MPP_FMT_RGB565
          MPP_FMT_ARGB8888
     */
+    /*
+      output_type support list:
+         OUTPUT_TYPE_FILE
+         OUTPUT_TYPE_MEM_ADDR
+    */
+    param.output_type = OUTPUT_TYPE_FILE;
     param.output_fmt = MPP_FMT_YUV420SP;
     strcpy(param.output_file, "/data/raw");
 
@@ -37,6 +43,12 @@ usgae for libjpeghw.so:
 		MPP_FMT_ARGB8888
     */
     param.input_fmt = MPP_FMT_YUV420SP;
+    /*
+      output_type support list:
+         OUTPUT_TYPE_FILE
+         OUTPUT_TYPE_MEM_ADDR
+    */
+    param.output_type = OUTPUT_TYPE_FILE;
     strcpy(param.output_file, "/data/out.jpg");
 
     MpiJpegEncoder encoder;

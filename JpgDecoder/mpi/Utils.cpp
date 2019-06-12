@@ -112,6 +112,129 @@ void dump_mpp_frame_to_file(MppFrame frame, FILE *fp)
     }
 }
 
+void dump_mpp_frame_to_addr(MppFrame frame, void *addr)
+{
+    RK_U32 width    = 0;
+    RK_U32 height   = 0;
+    RK_U32 h_stride = 0;
+    RK_U32 v_stride = 0;
+    MppFrameFormat fmt  = MPP_FMT_YUV420SP;
+    MppBuffer buffer    = NULL;
+    RK_U8 *base = NULL;
+    RK_U8 *dst = NULL;
+
+    dst = (RK_U8*)addr;
+
+    if (NULL == dst || NULL == frame)
+        return;
+
+    width    = mpp_frame_get_width(frame);
+    height   = mpp_frame_get_height(frame);
+    h_stride = mpp_frame_get_hor_stride(frame);
+    v_stride = mpp_frame_get_ver_stride(frame);
+    fmt      = mpp_frame_get_fmt(frame);
+    buffer   = mpp_frame_get_buffer(frame);
+
+    if (NULL == buffer)
+        return;
+
+    base = (RK_U8 *)mpp_buffer_get_ptr(buffer);
+
+    switch (fmt) {
+    case MPP_FMT_YUV422SP : {
+        /* YUV422SP -> YUV422P for better display */
+        RK_U32 i, j;
+        RK_U8 *base_y = base;
+        RK_U8 *base_c = base + h_stride * v_stride;
+        RK_U8 *tmp = mpp_malloc(RK_U8, h_stride * height * 2);
+        RK_U8 *tmp_u = tmp;
+        RK_U8 *tmp_v = tmp + width * height / 2;
+        RK_U32 offset = 0;
+
+        for (i = 0; i < height; i++, base_y += h_stride) {
+            memcpy(dst + offset, base_y, width);
+            offset += width;
+        }
+
+        for (i = 0; i < height; i++, base_c += h_stride) {
+            for (j = 0; j < width / 2; j++) {
+                tmp_u[j] = base_c[2 * j + 0];
+                tmp_v[j] = base_c[2 * j + 1];
+            }
+            tmp_u += width / 2;
+            tmp_v += width / 2;
+        }
+
+        memcpy(dst + offset, tmp, width * height);
+        mpp_free(tmp);
+    } break;
+    case MPP_FMT_YUV420SP : {
+        RK_U32 i;
+        RK_U8 *base_y = base;
+        RK_U8 *base_c = base + h_stride * v_stride;
+        RK_U32 offset = 0;
+
+        for (i = 0; i < height; i++, base_y += h_stride) {
+            memcpy(dst + offset, base_y, width);
+            offset += width;
+        }
+        for (i = 0; i < height / 2; i++, base_c += h_stride) {
+            memcpy(dst + offset, base_c, width);
+            offset += width;
+        }
+    } break;
+    case MPP_FMT_YUV420P : {
+        RK_U32 i;
+        RK_U8 *base_y = base;
+        RK_U8 *base_c = base + h_stride * v_stride;
+        RK_U32 offset = 0;
+
+        for (i = 0; i < height; i++, base_y += h_stride) {
+            memcpy(dst + offset, base_y, width);
+            offset += width;
+        }
+        for (i = 0; i < height / 2; i++, base_c += h_stride / 2) {
+            memcpy(dst + offset, base_c, width / 2);
+            offset += width / 2;
+        }
+        for (i = 0; i < height / 2; i++, base_c += h_stride / 2) {
+            memcpy(dst + offset, base_c, width / 2);
+            offset += width / 2;
+        }
+    } break;
+    case MPP_FMT_YUV444SP : {
+        /* YUV444SP -> YUV444P for better display */
+        RK_U32 i, j;
+        RK_U8 *base_y = base;
+        RK_U8 *base_c = base + h_stride * v_stride;
+        RK_U8 *tmp = mpp_malloc(RK_U8, h_stride * height * 2);
+        RK_U8 *tmp_u = tmp;
+        RK_U8 *tmp_v = tmp + width * height;
+        RK_U32 offset = 0;
+
+        for (i = 0; i < height; i++, base_y += h_stride) {
+            memcpy(dst + offset, base_y, width);
+            offset += width;
+        }
+
+        for (i = 0; i < height; i++, base_c += h_stride * 2) {
+            for (j = 0; j < width; j++) {
+                tmp_u[j] = base_c[2 * j + 0];
+                tmp_v[j] = base_c[2 * j + 1];
+            }
+            tmp_u += width;
+            tmp_v += width;
+        }
+
+        memcpy(dst, tmp, width * height * 2);
+        mpp_free(tmp);
+    } break;
+    default : {
+        ALOGE("not supported format %d", fmt);
+    } break;
+    }
+}
+
 MPP_RET read_yuv_image(RK_U8 *buf, FILE *fp, RK_U32 width, RK_U32 height,
                        RK_U32 hor_stride, RK_U32 ver_stride, MppFrameFormat fmt)
 {

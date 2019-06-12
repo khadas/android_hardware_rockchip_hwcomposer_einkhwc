@@ -10,6 +10,11 @@ class MpiJpegDecoder {
 public:
     MpiJpegDecoder() {}
 
+    enum OutputType {
+        OUTPUT_TYPE_FILE,
+        OUTPUT_TYPE_MEM_ADDR
+    };
+
     typedef struct DecParam {
         // input bitstream file
         char input_file[MAX_FILE_NAME_LENGTH];
@@ -26,8 +31,11 @@ public:
              MPP_FMT_ARGB8888
          */
         MppFrameFormat output_fmt;
+        // output type
+        OutputType output_type;
         // output bitstream file
         char output_file[MAX_FILE_NAME_LENGTH];
+        void *output_dst;
     } DecParam;
 
     bool start(DecParam param);
@@ -59,7 +67,7 @@ private:
 
         FILE            *fp_input;
         FILE            *fp_output;
-        FILE            *fp_config;
+        void            *output_dst;
         RK_S32          frame_count;
     } DecLoopData;
 

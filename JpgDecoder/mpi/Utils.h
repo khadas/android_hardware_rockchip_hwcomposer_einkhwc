@@ -8,6 +8,8 @@
 
 void dump_mpp_frame_to_file(MppFrame frame, FILE *fp);
 
+void dump_mpp_frame_to_addr(MppFrame frame, void *addr);
+
 MPP_RET read_yuv_image(RK_U8 *buf, FILE *fp, RK_U32 width, RK_U32 height,
                        RK_U32 hor_stride, RK_U32 ver_stride,
                        MppFrameFormat fmt);

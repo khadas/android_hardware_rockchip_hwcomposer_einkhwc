@@ -118,6 +118,8 @@ namespace android {
 #define EPD_DIRECT_A2       (12)
 #define EPD_STANDBY			(13)
 #define EPD_POWEROFF        (14)
+#define EPD_NOPOWER        (15)
+
 /*android use struct*/
 struct ebc_buf_info{
   int offset;
@@ -3581,7 +3583,7 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
   buf_info.win_y1 = rect.top;
   buf_info.win_y2 = rect.bottom;
   buf_info.epd_mode = mode;
-
+  ALOGD("DEBUG_lb hwc_post_epd mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
   memcpy((void *)(vaddr_real + buf_info.offset), buffer,
           buf_info.vir_height * buf_info.vir_width >> 1);
@@ -3647,6 +3649,10 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
   int *gray16_buffer_bak = gray16_buffer;
 
+  int *white_buffer;
+  white_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+  memset(white_buffer,0xff,ebc_buf_info.width * ebc_buf_info.height >> 1);
+
   Region updateRegion;
   Region currentA2Region;
 
@@ -3662,41 +3668,33 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   }
   char value[PROPERTY_VALUE_MAX];
 
-  if(epdMode == EPD_FULL || epdMode == EPD_BLOCK)
-  {
-      currentA2Region.clear();
-  }
-
-  if(!currentA2Region.isEmpty() || !gLastA2Region.isEmpty())
-  {
-      epdMode = EPD_A2;
-  }
-  else if(epdMode == EPD_A2)
-  {
-      epdMode = EPD_PART;
-  }
   property_get("debug.dither", value, "0");
   int dither = atoi(value);
-  if (epdMode != EPD_A2)
-  {
-    if(dither == 2){
-        Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-        gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-    }else if (dither == 1){
-        gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-    }
-    else{
-        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-    }
-  }
 
+  if(dither == 2){
+      Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+      gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
+  }else if (dither == 1){
+      gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+  }else{
+      gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+  }
 
   //EPD post
   Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
+  property_get("debug.a2", value, "0");
+  int a2 = atoi(value);
+  static int a2_last = 0;
+  if(a2 > a2_last){
+    ret = hwc_post_epd(white_buffer,rect,EPD_BLACK_WHITE);
+    a2_last = a2;
+  }
   ret = hwc_post_epd(gray16_buffer_bak,rect,epdMode);
 
   gralloc->unlock(gralloc, src_hnd);
   free(gray16_buffer_bak);
+  free(white_buffer);
+  white_buffer = NULL;
   gray16_buffer_bak = NULL;
   gray16_buffer = NULL;
   return 0;
@@ -4298,67 +4296,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
 
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   ALOGD("DEBUG_lb %s,line = %d , display = %d ,mode = %d",__FUNCTION__,__LINE__,display,mode);
-  char output_logo_path[100] = {0};
 
-  char nopower[255];
-
-  switch (mode) {
-    case HWC_POWER_MODE_EPD_NULL:
-      gCurrentEpdMode = EPD_NULL;
-      break;
-    case HWC_POWER_MODE_EPD_AUTO:
-      gCurrentEpdMode = EPD_AUTO;
-      break;
-    case HWC_POWER_MODE_EPD_FULL:
-      gCurrentEpdMode = EPD_FULL;
-      break;
-    case HWC_POWER_MODE_EPD_A2:
-      gCurrentEpdMode = EPD_A2;
-      break;
-    case HWC_POWER_MODE_EPD_PART:
-      gCurrentEpdMode = EPD_PART;
-      break;
-    case HWC_POWER_MODE_EPD_FULL_DITHER:
-      gCurrentEpdMode = EPD_FULL_DITHER;
-      break;
-    case HWC_POWER_MODE_EPD_RESET:
-      gCurrentEpdMode = EPD_RESET;
-      break;
-    case HWC_POWER_MODE_EPD_BLACK_WHITE:
-      gCurrentEpdMode = EPD_BLACK_WHITE;
-      break;
-    case HWC_POWER_MODE_EPD_TEXT:
-      gCurrentEpdMode = EPD_TEXT;
-      break;
-    case HWC_POWER_MODE_EPD_BLOCK:
-      gCurrentEpdMode = EPD_BLOCK;
-      break;
-    case HWC_POWER_MODE_EPD_FULL_WIN:
-      gCurrentEpdMode = EPD_FULL_WIN;
-      break;
-    case HWC_POWER_MODE_EPD_OED_PART:
-      gCurrentEpdMode = EPD_OED_PART;
-      break;
-    case HWC_POWER_MODE_EPD_DIRECT_PART:
-      gCurrentEpdMode = EPD_DIRECT_PART;
-      break;
-    case HWC_POWER_MODE_EPD_DIRECT_A2:
-      gCurrentEpdMode = EPD_DIRECT_A2;
-      break;
-    case HWC_POWER_MODE_EPD_STANDBY:
-      gCurrentEpdMode = EPD_STANDBY;
-      hwc_post_epd_logo(STANDBY_IMAGE_PATH);
-      break;
-    case HWC_POWER_MODE_EPD_POWEROFF:
-      gCurrentEpdMode = EPD_POWEROFF;
-      property_get("sys.shutdown.nopower", nopower, "0");
-      if(atoi(nopower) == 1){
-        hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
-      }else{
-        hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
-      }
-      break;
-  };
 #if 0
   uint64_t dpmsValue = 0;
   switch (mode) {
@@ -4651,9 +4589,64 @@ static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
                                  int index) {
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   UN_USED(display);
-  UN_USED(index);
-  gCurrentEpdMode = index;
   ALOGD("DEBUG_lb hwc_set_active_config mode = %d",index);
+
+  switch (index) {
+    case HWC_POWER_MODE_EPD_NULL:
+      gCurrentEpdMode = EPD_NULL;
+      break;
+    case HWC_POWER_MODE_EPD_AUTO:
+      gCurrentEpdMode = EPD_AUTO;
+      break;
+    case HWC_POWER_MODE_EPD_FULL:
+      gCurrentEpdMode = EPD_FULL;
+      break;
+    case HWC_POWER_MODE_EPD_A2:
+      gCurrentEpdMode = EPD_A2;
+      break;
+    case HWC_POWER_MODE_EPD_PART:
+      gCurrentEpdMode = EPD_PART;
+      break;
+    case HWC_POWER_MODE_EPD_FULL_DITHER:
+      gCurrentEpdMode = EPD_FULL_DITHER;
+      break;
+    case HWC_POWER_MODE_EPD_RESET:
+      gCurrentEpdMode = EPD_RESET;
+      break;
+    case HWC_POWER_MODE_EPD_BLACK_WHITE:
+      gCurrentEpdMode = EPD_BLACK_WHITE;
+      break;
+    case HWC_POWER_MODE_EPD_TEXT:
+      gCurrentEpdMode = EPD_TEXT;
+      break;
+    case HWC_POWER_MODE_EPD_BLOCK:
+      gCurrentEpdMode = EPD_BLOCK;
+      break;
+    case HWC_POWER_MODE_EPD_FULL_WIN:
+      gCurrentEpdMode = EPD_FULL_WIN;
+      break;
+    case HWC_POWER_MODE_EPD_OED_PART:
+      gCurrentEpdMode = EPD_OED_PART;
+      break;
+    case HWC_POWER_MODE_EPD_DIRECT_PART:
+      gCurrentEpdMode = EPD_DIRECT_PART;
+      break;
+    case HWC_POWER_MODE_EPD_DIRECT_A2:
+      gCurrentEpdMode = EPD_DIRECT_A2;
+      break;
+    case HWC_POWER_MODE_EPD_STANDBY:
+      gCurrentEpdMode = EPD_STANDBY;
+      hwc_post_epd_logo(STANDBY_IMAGE_PATH);
+      break;
+    case HWC_POWER_MODE_EPD_POWEROFF:
+      gCurrentEpdMode = EPD_POWEROFF;
+      hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+      break;
+    case HWC_POWER_MODE_EPD_NOPOWER:
+      gCurrentEpdMode = EPD_NOPOWER;
+      hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
+      break;
+  };
 #if 0
   DrmConnector *c = ctx->drm.GetConnectorFromType(display);
   if (!c) {

@@ -156,7 +156,7 @@ struct win_coordinate{
 #define STANDBY_IMAGE_PATH "/vendor/media/standby.jpg"
 
 struct region_buffer_t {
-	int size;
+	unsigned int size;
 	char buffer[REGION_BUFFER_SIZE];
 };
 
@@ -3772,8 +3772,8 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   property_get("service.bootanim.exit", value, "0");
   int bootanim = atoi(value);
   gLastEpdMode = gCurrentEpdMode;
-  property_get("debug.mode", value, "0");
-  gCurrentEpdMode = atoi(value);
+//  property_get("debug.mode", value, "0");
+//  gCurrentEpdMode = atoi(value);
 
   char output_logo_path[100] = {0};
 
@@ -4481,8 +4481,9 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
   hd->v_total = mode.v_total();
 
 #endif
-  *num_configs = 14;
-  configs[0] = 0;
+  *num_configs = 16;
+  for(int i = 0 ; i < static_cast<int>(*num_configs); i++  )
+    configs[i] = i;
 
   return 0;
 }

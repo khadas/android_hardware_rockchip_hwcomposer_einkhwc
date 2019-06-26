@@ -155,11 +155,6 @@ struct win_coordinate{
 #define NOPOWER_IMAGE_PATH "/vendor/media/nopower.jpg"
 #define STANDBY_IMAGE_PATH "/vendor/media/standby.jpg"
 
-struct region_buffer_t {
-	unsigned int size;
-	char buffer[REGION_BUFFER_SIZE];
-};
-
 static int gPixel_format = 24;
 
 void *ebc_buffer_base = NULL;
@@ -3759,6 +3754,16 @@ int hwc_post_epd_logo(const char src_path[]){
 
 }
 
+static int unflattenRegion(struct region_buffer_t &buffer, Region &region) {
+    region.clear();
+    if (buffer.size)
+        if (!buffer.size || buffer.size > sizeof(buffer.buffer))
+            return -1;
+    if (region.unflatten((void const*)(buffer.buffer),
+                buffer.size) != NO_ERROR)
+        return -1;
+    return 0;
+}
 
 static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
                    hwc_display_contents_1_t **sf_display_contents) {
@@ -3827,6 +3832,18 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
               close(sf_layer->acquireFenceFd);
               sf_layer->acquireFenceFd = -1;
           }
+          struct rk_ashmem_eink_t rk_ashmem_eink;
+          Region updateRegion;
+          Region currentA2Region;
+          struct region_buffer_t A2Region_buffer;
+          struct region_buffer_t UpdateRegion_buffer;
+
+          hwc_get_handle_EinkInfo(ctx->gralloc,sf_layer->handle,&rk_ashmem_eink);
+          ALOGD("DEBUG_lb einkMode = %d ",rk_ashmem_eink.mEinkMode);
+          unflattenRegion(rk_ashmem_eink.mA2Region,currentA2Region);
+          currentA2Region.dump("hwc unflattenRegion currentA2Region");
+          unflattenRegion(rk_ashmem_eink.mUpdateRegion,updateRegion);
+          updateRegion.dump("hwc unflattenRegion updateRegion");
           if(ctx->drm.isSupportRkRga())
           {
             ret = hwc_set_epd(&hwc_info,sf_layer);

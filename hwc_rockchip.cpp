@@ -605,6 +605,33 @@ exit:
 }
 #endif
 
+int hwc_get_handle_EinkInfo(const gralloc_module_t *gralloc,buffer_handle_t hnd, const struct rk_ashmem_eink_t *rk_ashmem_eink)
+{
+    int ret = 0;
+    int op = GRALLOC_MODULE_PERFORM_GET_RK_ASHMEM;
+    struct rk_ashmem_eink_t rk_ashmem;
+
+    if(!rk_ashmem_eink)
+        return -EINVAL;
+
+    if(gralloc && gralloc->perform)
+        ret = gralloc->perform(gralloc, op, hnd, &rk_ashmem);
+    else
+        ret = -EINVAL;
+
+    if(ret != 0)
+    {
+        ALOGE("%s:cann't get value from gralloc", __FUNCTION__);
+        goto exit;
+    }
+    memcpy((void*)rk_ashmem_eink,(void*)(&(rk_ashmem)),sizeof(struct rk_ashmem_eink_t));
+
+
+exit:
+    return ret;
+}
+
+
 int hwc_get_handle_width(const gralloc_module_t *gralloc, buffer_handle_t hnd)
 {
 #if RK_PER_MODE
@@ -2271,7 +2298,7 @@ AllMatch:
             {
                 ALOGD_IF(log_level(DBG_DEBUG), "%s:line=%d vop band with is too big,fail match layers.size=%zu",__FUNCTION__,__LINE__,layers.size());
                 goto FailMatch;
-            } 
+            }
         }
     }
 #endif

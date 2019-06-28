@@ -3578,6 +3578,31 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
   buf_info.win_y1 = rect.top;
   buf_info.win_y2 = rect.bottom;
   buf_info.epd_mode = mode;
+
+
+  char value[PROPERTY_VALUE_MAX];
+  property_get("debug.dump", value, "0");
+  int new_value = 0;
+  new_value = atoi(value);
+  if(new_value > 0){
+      char data_name[100] ;
+      static int DumpSurfaceCount = 0;
+
+      sprintf(data_name,"/data/dump/dmlayer%d_%d_%d.bin", DumpSurfaceCount,
+               buf_info.vir_width, buf_info.vir_height);
+      DumpSurfaceCount++;
+      FILE *file = fopen(data_name, "wb+");
+      if (!file)
+      {
+          ALOGD("Could not open %s\n",data_name);
+      } else{
+          ALOGD("open %s and write ok\n",data_name);
+          fwrite(buffer, buf_info.vir_height * buf_info.vir_width >> 1 , 1, file);
+          fclose(file);
+          property_set("debug.dump","0");
+      }
+  }
+
   ALOGD("DEBUG_lb hwc_post_epd mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
   memcpy((void *)(vaddr_real + buf_info.offset), buffer,

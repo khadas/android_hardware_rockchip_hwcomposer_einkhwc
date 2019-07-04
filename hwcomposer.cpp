@@ -148,8 +148,6 @@ struct win_coordinate{
 #define SET_EBC_SEND_BUFFER 0x7001
 #define GET_EBC_BUFFER_INFO 0x7003
 
-#define REGION_BUFFER_SIZE 512
-
 
 #define POWEROFF_IMAGE_PATH "/vendor/media/poweroff.jpg"
 #define NOPOWER_IMAGE_PATH "/vendor/media/nopower.jpg"
@@ -163,10 +161,10 @@ struct ebc_buf_info ebc_buf_info;
 static int gLastEpdMode = EPD_PART;
 static int gCurrentEpdMode = EPD_PART;
 static int gResetEpdMode = EPD_PART;
-static struct region_buffer_t gCurrentA2Region;
-static struct region_buffer_t gUpdateRegion;
 static Region gLastA2Region;
 static Region gSavedUpdateRegion;
+static bool gFirst = true;
+static bool gPoweroff =false;
 
 
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
@@ -175,7 +173,7 @@ static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
 static int update_display_bestmode(hwc_drm_display_t *hd, int display, DrmConnector *c);
 
 #if 1 //RGA_POLICY
-int hwc_set_epd(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t &fb_target,hwc_drm_display_t *hd);
+int hwc_set_epd(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t &fb_target,Region &A2Region,Region &updateRegion);
 int hwc_rgba888_to_gray256(hwc_drm_display_t *hd, hwc_layer_1_t &fb_target);
 void hwc_free_buffer(hwc_drm_display_t *hd);
 #endif
@@ -3406,55 +3404,56 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
   char  g0,g3;
   char *temp_dst = (char *)gray16_buffer;
 
-  char value[PROPERTY_VALUE_MAX];
-  property_get("debug.gray", value, "0");
-  int new_value = 0;
-  new_value = atoi(value);
-  if(new_value == 0){
-      for(int i = 0; i < h;i++){
-          for(int j = 0; j< w / 2;j++){
-              src_data = *gray256_addr++;
-              g0 =  (src_data&0xf0)>>4;
-              src_data = *gray256_addr++;
-              g3 =  src_data&0xf0;
-              *temp_dst++ = g0|g3;
-          }
-          gray256_addr += (vir_w - w);
+//  char value[PROPERTY_VALUE_MAX];
+//  property_get("debug.gray", value, "0");
+//  int new_value = 0;
+//  new_value = atoi(value);
+//  if(new_value == 0){
+  for(int i = 0; i < h;i++){
+      for(int j = 0; j< w / 2;j++){
+          src_data = *gray256_addr++;
+          g0 =  (src_data&0xf0)>>4;
+          src_data = *gray256_addr++;
+          g3 =  src_data&0xf0;
+          *temp_dst++ = g0|g3;
       }
-  }else if(new_value == 1)
-  {
-      int i = 0, j = 0;
-      for(i = 0; i < ebc_buf_info.fb_height;i++){
-          for(j = 0; j<ebc_buf_info.fb_width / 4;j++){
-              g0 =  (src_data&0xf0)>>4;
-              src_data = *gray256_addr++;
-              g3 =  src_data&0xf0;
-              src_data = *gray256_addr++;
-              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
-          }
-          for(j = ebc_buf_info.fb_width / 4; j<ebc_buf_info.fb_width / 2;j++){
-              g0 =  (src_data&0xf0)>>4;
-              src_data = *gray256_addr++;
-              g3 =  src_data&0xf0;
-              src_data = *gray256_addr++;
-              *temp_dst++ = g0|g3;
-          }
-          gray256_addr += (vir_w - w);
-      }
-
-  }else{
-      for(int i = 0; i < ebc_buf_info.fb_height;i++){
-          for(int j = 0; j<ebc_buf_info.fb_width / 2;j++){
-              g0 =  (src_data&0xf0)>>4;
-              src_data = *gray256_addr++;
-              g3 =  src_data&0xf0;
-              src_data = *gray256_addr++;
-              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
-          }
-          gray256_addr += (vir_w - w);
-      }
-
+      gray256_addr += (vir_w - w);
   }
+//  }
+//  else if(new_value == 1)
+//  {
+//      int i = 0, j = 0;
+//      for(i = 0; i < ebc_buf_info.fb_height;i++){
+//          for(j = 0; j<ebc_buf_info.fb_width / 4;j++){
+//              g0 =  (src_data&0xf0)>>4;
+//              src_data = *gray256_addr++;
+//              g3 =  src_data&0xf0;
+//              src_data = *gray256_addr++;
+//              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
+//          }
+//          for(j = ebc_buf_info.fb_width / 4; j<ebc_buf_info.fb_width / 2;j++){
+//              g0 =  (src_data&0xf0)>>4;
+//              src_data = *gray256_addr++;
+//              g3 =  src_data&0xf0;
+//              src_data = *gray256_addr++;
+//              *temp_dst++ = g0|g3;
+//          }
+//          gray256_addr += (vir_w - w);
+//      }
+
+//  }else{
+//      for(int i = 0; i < ebc_buf_info.fb_height;i++){
+//          for(int j = 0; j<ebc_buf_info.fb_width / 2;j++){
+//              g0 =  (src_data&0xf0)>>4;
+//              src_data = *gray256_addr++;
+//              g3 =  src_data&0xf0;
+//              src_data = *gray256_addr++;
+//              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
+//          }
+//          gray256_addr += (vir_w - w);
+//      }
+
+//  }
 
   return 0;
 
@@ -3563,6 +3562,99 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
   return 0;
 }
 
+
+void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_height, int vir_width,int panel_w)
+{
+    int i,j;
+    unsigned int  g0, g1, g2, g3,g4,g5,g6,g7;
+    unsigned int *gray_new_temp;
+#if 0
+    for(j=0; j<vir_height; j++) //c code
+    {
+        gray_new_temp = graynew;
+        for(i=0; i<panel_w; i+=16)
+        {
+            g0 = (*gray8bit & 0x000000f0) >> 4;
+            g1 = (*gray8bit & 0x0000f000) >> 8;
+            g2 = (*gray8bit & 0x00f00000) >> 12;
+            g3 = (*gray8bit & 0xf0000000) >> 16;
+            gray8bit++;
+
+            g4 = (*gray8bit & 0x000000f0) << 12;
+            g5 = (*gray8bit & 0x0000f000) << 8;
+            g6 = (*gray8bit & 0x00f00000) << 4;
+            g7 = (*gray8bit & 0xf0000000) ;
+            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
+            gray8bit++;
+
+            g0 = (*gray8bit & 0x000000f0) >> 4;
+            g1 = (*gray8bit & 0x0000f000) >> 8;
+            g2 = (*gray8bit & 0x00f00000) >> 12;
+            g3 = (*gray8bit & 0xf0000000) >> 16;
+            gray8bit++;
+
+            g4 = (*gray8bit & 0x000000f0) << 12;
+            g5 = (*gray8bit & 0x0000f000) << 8;
+            g6 = (*gray8bit & 0x00f00000) << 4;
+            g7 = (*gray8bit & 0xf0000000) ;
+            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
+            gray8bit++;
+
+
+        }
+
+        gray_new_temp += vir_width>>3;
+        graynew = gray_new_temp;
+    }
+#endif
+#if 1
+
+    for(j=0; j<vir_height; j++) //c code
+    {
+        gray_new_temp = graynew;
+        for(i=0; i<panel_w; i+=8)
+        {
+            g0 = (*gray8bit & 0x000000f0) >> 4;
+            g1 = (*gray8bit & 0x0000f000) >> 8;
+            g2 = (*gray8bit & 0x00f00000) >> 12;
+            g3 = (*gray8bit & 0xf0000000) >> 16;
+            gray8bit++;
+
+            g4 = (*gray8bit & 0x000000f0) << 12;
+            g5 = (*gray8bit & 0x0000f000) << 8;
+            g6 = (*gray8bit & 0x00f00000) << 4;
+            g7 = (*gray8bit & 0xf0000000) ;
+            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
+            gray8bit++;
+
+        }
+
+        gray_new_temp += vir_width>>3;
+        graynew = gray_new_temp;
+    }
+
+#endif
+}
+
+static inline void apply_white_region(char *buffer, int height, int width, Region region)
+{
+	int left,right;
+    if (region.isEmpty()) return;
+    size_t count = 0;
+    const Rect* rects = region.getArray(&count);
+    for (int i = 0;i < (int)count;i++) {
+	 left = ebc_buf_info.color_panel? rects[i].left*3 : rects[i].left;
+	 right = ebc_buf_info.color_panel? rects[i].right*3 : rects[i].right;
+        int w = right - left;
+        int offset = rects[i].top * width + left;
+        for (int h = rects[i].top;h <= rects[i].bottom && h < height;h++) {
+            memset(buffer + (offset >> 1), 0xFF, w >> 1);
+            offset += width;
+        }
+    }
+}
+
+
 int hwc_post_epd(int *buffer, Rect rect, int mode){
 
   struct ebc_buf_info buf_info;
@@ -3616,8 +3708,11 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
   return 0;
 }
 
-int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
+
+int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Region,Region &updateRegion) {
   int ret = 0;
+  static int not_fullmode_count = 0;
+  Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, hd->rgaBuffer_index);
 
@@ -3645,25 +3740,44 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = gra256_buffer.buffer()->handle;
 
-#if (!RK_PER_MODE && RK_DRM_GRALLOC)
   width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
   height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
   stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
   byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
   format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
   size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
-#else
-  width = hwc_get_handle_width(gralloc,src_hnd);
-  height = hwc_get_handle_height(gralloc,src_hnd);
-  stride = hwc_get_handle_stride(gralloc,src_hnd);
-  byte_stride = hwc_get_handle_byte_stride(gralloc,src_hnd);
-  format = hwc_get_handle_format(gralloc,src_hnd);
-  size = hwc_get_handle_size(gralloc,src_hnd);
-#endif
-
 
   gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&gray256_addr);
+
+send_one_buffer:
+
+  ALOGD("HWC >>>>>>>>>>>>>> begin post >>>>>>>>");
+  //reset mode to default.
+  int epdMode = gCurrentEpdMode;
+  gCurrentEpdMode = gResetEpdMode;
+
+	if(epdMode == EPD_NULL){
+    gralloc->unlock(gralloc, src_hnd);
+    gray256_addr = NULL;
+    return 0;
+	}
+
+  if(epdMode == EPD_FULL || epdMode == EPD_BLOCK)
+  {
+      A2Region.clear();
+  }
+  else if(epdMode == EPD_A2)
+  {
+      epdMode = EPD_PART;
+  }
+
+  //only when has a2 region, we are in a2 mode.
+  if(!A2Region.isEmpty() || !gLastA2Region.isEmpty())
+  {
+      epdMode = EPD_A2;
+  }
+
 
   int *gray16_buffer;
   gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
@@ -3673,43 +3787,150 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target) {
   white_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
   memset(white_buffer,0xff,ebc_buf_info.width * ebc_buf_info.height >> 1);
 
-  Region updateRegion;
-  Region currentA2Region;
-
-  int epdMode;
-
-  epdMode = gCurrentEpdMode;
-  gCurrentEpdMode = gResetEpdMode;
-  if(epdMode == EPD_NULL){
-    ALOGE("Can't set epd EPD_NULL mode");
-    gralloc->unlock(gralloc, src_hnd);
-    free(gray16_buffer);
-    return -1;
-  }
-  char value[PROPERTY_VALUE_MAX];
-
-  property_get("debug.dither", value, "0");
-  int dither = atoi(value);
-
-  if(dither == 2){
-      Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-      gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-  }else if (dither == 1){
+  if (epdMode != EPD_A2)
+  {
+    if(epdMode == EPD_FULL_DITHER){
       gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-  }else{
+    }else{
       gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+    }
   }
 
-  //EPD post
-  Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
-  property_get("debug.a2", value, "0");
-  int a2 = atoi(value);
-  static int a2_last = 0;
-  if(a2 > a2_last){
-    ret = hwc_post_epd(white_buffer,rect,EPD_BLACK_WHITE);
-    a2_last = a2;
+  switch(epdMode){
+      case EPD_FULL:
+      case EPD_FULL_WIN:
+      case EPD_FULL_DITHER:
+          //LOGE("jeffy FULL");
+          not_fullmode_count = 0;
+          break;
+      case EPD_A2:
+          {
+              ALOGD("DEBUG_lb %s,line = %d, epdMode %d",__FUNCTION__,__LINE__,epdMode);
+              Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+              screenRegion.dump("fremebuffer1 screenRegion");
+              if (screenRegion.subtract(A2Region).isEmpty() &&
+                      screenRegion.subtract(gLastA2Region).isEmpty()) {
+                  //all screen region was in a2 mode.
+                  screenRegion.dump("fremebuffer subtract screenRegion");
+                  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
+                  break;
+              }
+              //window a2.
+              Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
+                                ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
+              if (A2Region.isEmpty()) {
+                 // ALOGE("jeffy quit A2");
+                  //get out a2 mode.
+                  //1.reset updated region to white.
+                  updateRegion.orSelf(gLastA2Region);
+                  updateRegion.orSelf(gSavedUpdateRegion);
+                  gLastA2Region.clear();
+                  gSavedUpdateRegion.clear();
+                  apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.vir_width, updateRegion);
+
+                  //2.paint updated region.
+                  epdMode = EPD_A2;//EPD_BLACK_WHITE;//
+                  ALOGD("DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
+                  hwc_post_epd(gray16_buffer, postRect, epdMode);
+
+                  //3.will repaint those regions in full mode.
+                  gCurrentEpdMode = EPD_FULL_WIN;
+                  Rect rect = updateRegion.getBounds();
+                  postRect = rect;
+                  goto    send_one_buffer;
+              }
+
+              Region newA2Region
+      = A2Region - gSavedUpdateRegion - gLastA2Region;
+
+              Region newUpdateRegion
+      = updateRegion - gSavedUpdateRegion - gLastA2Region;
+              newA2Region.dump("fremebuffer1 newA2Region");
+              newUpdateRegion.dump("fremebuffer1 newUpdateRegion");
+              A2Region.dump("fremebuffer1 currentA2Region");
+
+              //update saved region info.
+              gSavedUpdateRegion.orSelf(gLastA2Region);
+              gSavedUpdateRegion.orSelf(updateRegion);
+
+              char value[PROPERTY_VALUE_MAX];
+              property_get("debug.lb.1", value, "0");
+              int new_value = 0;
+              new_value = atoi(value);
+              if(new_value > 0){
+                  FILE *file = fopen("/data/gray256.bin", "wb+");
+                  if (!file)
+                  {
+                      ALOGD("Could not open /data/data.bin\n");
+                  } else
+                  ALOGD("open /data/gray256.bin and write ok\n");
+                  fwrite(gray256_addr, ebc_buf_info.height * ebc_buf_info.width , 1, file);
+                  fclose(file);
+              }
+              gLastA2Region = A2Region;
+              gray256_to_gray2_dither((char *)gray256_addr,
+                      (char *)gray16_buffer, ebc_buf_info.vir_height,
+                     ( ebc_buf_info.color_panel ?ebc_buf_info.fb_width*3:ebc_buf_info.width), ebc_buf_info.vir_width,
+                      gSavedUpdateRegion);
+              property_get("debug.lb.2", value, "0");
+              new_value = 0;
+              new_value = atoi(value);
+              if(new_value > 0){
+                  FILE *file = fopen("/data/gray2_dither.bin", "wb+");
+                  if (!file)
+                  {
+                      ALOGD("Could not open /data/data.bin\n");
+                  } else
+                  ALOGD("open /data/gray2_dither.bin and write ok\n");
+                  fwrite(gray16_buffer, ebc_buf_info.height * ebc_buf_info.width >> 1 , 1, file);
+                  fclose(file);
+              }
+              if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
+                  //has new region.
+                  newA2Region.dump("fremebuffer2 newA2Region");
+                  newUpdateRegion.dump("fremebuffer2 newUpdateRegion");
+                  //1.reset new region to white, and paint them.
+                  apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
+                          ebc_buf_info.vir_width, newUpdateRegion | newA2Region);
+                  property_get("debug.lb.2", value, "0");
+                  new_value = 0;
+                  new_value = atoi(value);
+                  if(new_value > 0){
+                      FILE *file = fopen("/data/gray2_dither_white.bin", "wb+");
+                      if (!file)
+                      {
+                          ALOGD("Could not open /data/data.bin\n");
+                      } else
+                      ALOGD("open /data/gray2_dither.bin and write ok\n");
+                      fwrite(gray16_buffer, ebc_buf_info.height * ebc_buf_info.width >> 1 , 1, file);
+                      fclose(file);
+                  }
+                  epdMode = EPD_BLACK_WHITE;
+                  ALOGD("DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
+                  hwc_post_epd(gray16_buffer, postRect, epdMode);
+                  //2.will repaint those regions in a2 mode.
+                  goto    send_one_buffer;
+              }
+              //not_fullmode_count++;
+              break;
+          }
+      case EPD_BLOCK:
+         // release_wake_lock("show_advt_lock");
+      default:
+          //LOGE("jeffy part:%d", epdMode);
+          not_fullmode_count++;
+          break;
+
   }
-  ret = hwc_post_epd(gray16_buffer_bak,rect,epdMode);
+
+  if(not_fullmode_count > 10){
+      epdMode = EPD_FULL;
+      not_fullmode_count =0;
+  }
+  hwc_post_epd(gray16_buffer_bak, postRect, epdMode);
+
+
+  ALOGD("HWC >>>>>>>>>>>>>> end post >>>>>>>>");
 
   gralloc->unlock(gralloc, src_hnd);
   free(gray16_buffer_bak);
@@ -3752,6 +3973,8 @@ static void inputJpgLogo(const char src_path[],const void *dst, int w, int h)
 
 }
 
+static bool isOutingoffStandbyFlag = false;
+
 int hwc_post_epd_logo(const char src_path[]){
   int ret = 0;
   //NV12 format size = w * h * 1.5
@@ -3762,9 +3985,23 @@ int hwc_post_epd_logo(const char src_path[]){
   gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
   int *gray16_buffer_bak = gray16_buffer;
 
+	char isNeedWhiteScreenWithStandby[PROPERTY_VALUE_MAX] = "n";
+
+	/* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
+  property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
+  if(strcmp(isNeedWhiteScreenWithStandby, "y") == 0){
+      memset(gray16_buffer_bak, 0xff, ebc_buf_info.vir_width * ebc_buf_info.vir_height * 4);
+      ALOGD("DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
+      //EPD post
+      gCurrentEpdMode = EPD_BLOCK;
+      Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
+      ret = hwc_post_epd(gray16_buffer_bak,rect,gCurrentEpdMode);
+  }
+
   gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
 
   //EPD post
+  gCurrentEpdMode = EPD_BLOCK;
   Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
   ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_FULL);
   if(ret)
@@ -3779,66 +4016,174 @@ int hwc_post_epd_logo(const char src_path[]){
 
 }
 
-static int unflattenRegion(struct region_buffer_t &buffer, Region &region) {
+static int unflattenRegion(const struct region_buffer_t &buffer, Region &region) {
     region.clear();
     if (buffer.size)
         if (!buffer.size || buffer.size > sizeof(buffer.buffer))
             return -1;
-    if (region.unflatten((void const*)(buffer.buffer),
+    if (region.unflatten((void const*)buffer.buffer,
                 buffer.size) != NO_ERROR)
         return -1;
     return 0;
 }
 
+static int hwc_handle_eink_mode(int mode){
+
+	/* when system power-off, refuse any display actions */
+	if(gPoweroff == true){
+		gCurrentEpdMode = EPD_NULL;
+		return 0;
+  }
+
+  switch (mode) {
+    case HWC_POWER_MODE_EPD_NULL:
+      gCurrentEpdMode = EPD_NULL;
+      break;
+    case HWC_POWER_MODE_EPD_AUTO:
+      gCurrentEpdMode = EPD_AUTO;
+      gResetEpdMode = EPD_AUTO;
+      break;
+    case HWC_POWER_MODE_EPD_FULL:
+      gCurrentEpdMode = EPD_FULL;
+      break;
+    case HWC_POWER_MODE_EPD_A2:
+      gCurrentEpdMode = EPD_A2;
+      break;
+    case HWC_POWER_MODE_EPD_PART:
+      gCurrentEpdMode = EPD_PART;
+      gResetEpdMode = EPD_PART;
+      break;
+    case HWC_POWER_MODE_EPD_FULL_DITHER:
+      gCurrentEpdMode = EPD_FULL_DITHER;
+      break;
+    case HWC_POWER_MODE_EPD_RESET:
+      gCurrentEpdMode = EPD_RESET;
+      break;
+    case HWC_POWER_MODE_EPD_BLACK_WHITE:
+      gCurrentEpdMode = EPD_BLACK_WHITE;
+      break;
+    case HWC_POWER_MODE_EPD_TEXT:
+      gCurrentEpdMode = EPD_TEXT;
+      break;
+    case HWC_POWER_MODE_EPD_BLOCK:
+      gCurrentEpdMode = EPD_BLOCK;
+      break;
+    case HWC_POWER_MODE_EPD_FULL_WIN:
+      gCurrentEpdMode = EPD_FULL_WIN;
+      break;
+    case HWC_POWER_MODE_EPD_OED_PART:
+      gCurrentEpdMode = EPD_OED_PART;
+      gResetEpdMode = EPD_OED_PART;
+      break;
+    case HWC_POWER_MODE_EPD_DIRECT_PART:
+      gCurrentEpdMode = EPD_DIRECT_PART;
+      break;
+    case HWC_POWER_MODE_EPD_DIRECT_A2:
+      gCurrentEpdMode = EPD_DIRECT_A2;
+      break;
+    case HWC_POWER_MODE_EPD_STANDBY:
+      gCurrentEpdMode = EPD_STANDBY;
+      hwc_post_epd_logo(STANDBY_IMAGE_PATH);
+      isOutingoffStandbyFlag = true;
+      break;
+    case HWC_POWER_MODE_EPD_POWEROFF:
+      gCurrentEpdMode = EPD_POWEROFF;
+      gResetEpdMode = EPD_POWEROFF;
+      hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+      break;
+    case HWC_POWER_MODE_EPD_NOPOWER:
+      gCurrentEpdMode = EPD_NOPOWER;
+      hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
+      break;
+  };
+
+  return 0;
+}
+
+static inline long __currentTime()
+{
+    struct timeval tp;
+    gettimeofday(&tp, NULL);
+   return static_cast<long>(tp.tv_sec) * 1000000 + tp.tv_usec;
+}
+
 static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
                    hwc_display_contents_1_t **sf_display_contents) {
   ATRACE_CALL();
+  long t0 = __currentTime();
+
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   int ret = 0;
   inc_frame();
   char value[PROPERTY_VALUE_MAX];
   property_get("debug.enable", value, "0");
   int epd_enable = atoi(value);
+
   property_get("service.bootanim.exit", value, "0");
   int bootanim = atoi(value);
-  gLastEpdMode = gCurrentEpdMode;
-//  property_get("debug.mode", value, "0");
-//  gCurrentEpdMode = atoi(value);
 
-  char output_logo_path[100] = {0};
 
-  char nopower[255];
+  static int not_fullmode_count;
+  int width = ebc_buf_info.vir_width;
+  int height = ebc_buf_info.vir_height;
 
-  int disable_epd = false;
-  switch (gCurrentEpdMode) {
-    case HWC_POWER_MODE_EPD_BLOCK:
-    case HWC_POWER_MODE_EPD_STANDBY:
-      disable_epd = true;
-      if(gLastEpdMode != gCurrentEpdMode){
-        hwc_post_epd_logo(STANDBY_IMAGE_PATH);
+
+  Region updateRegion;
+  Region currentA2Region;
+  int requestEpdMode;
+  Rect postRect = Rect(0, 0, width, height);
+
+  //Get EinkInfo from ashmem.
+  for (size_t i = 0; i < num_displays; ++i) {
+      hwc_display_contents_1_t *dc = sf_display_contents[i];
+
+  if (!sf_display_contents[i])
+    continue;
+
+    size_t num_dc_layers = dc->numHwLayers;
+
+    for (size_t j = 0; j < num_dc_layers; ++j) {
+      hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
+      dump_layer(ctx->gralloc, true, sf_layer, j);
+      if (sf_layer != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
+
+        long t3 = __currentTime();
+        struct rk_ashmem_eink_t rk_ashmem_eink;
+
+        hwc_get_handle_EinkInfo(ctx->gralloc,sf_layer->handle,&rk_ashmem_eink);
+        ALOGD("DEBUG_lb einkMode = %d ",rk_ashmem_eink.mEinkMode);
+
+        requestEpdMode = rk_ashmem_eink.mEinkMode;
+
+        unflattenRegion(rk_ashmem_eink.mA2Region,currentA2Region);
+        currentA2Region.dump("hwc unflattenRegion currentA2Region");
+        unflattenRegion(rk_ashmem_eink.mUpdateRegion,updateRegion);
+        updateRegion.dump("hwc unflattenRegion updateRegion");
+
+        long t4 = __currentTime();
+        ALOGD("%s:line = %d cost_time=%ld us",__FUNCTION__,__LINE__, t4 - t3);
       }
-      break;
-    case HWC_POWER_MODE_EPD_POWEROFF:
-      disable_epd = true;
-      if(gLastEpdMode != gCurrentEpdMode){
-        gCurrentEpdMode = EPD_POWEROFF;
-          property_get("sys.shutdown.nopower", nopower, "0");
-          if(atoi(nopower) == 1){
-            hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
-          }else{
-            hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+    }
+  }
+
+  //Handle eink mode.
+  ret = hwc_handle_eink_mode(requestEpdMode);
+
+  property_get("debug.property.enable", value, "0");
+  if(atoi(value) > 0){
+      property_get("debug.mode", value, "0");
+      gCurrentEpdMode = atoi(value);
+      if(gCurrentEpdMode == EPD_A2){
+          Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+          currentA2Region.andSelf(screenRegion);
           }
-      }
-      break;
-    case HWC_POWER_MODE_EPD_PART:
-      disable_epd = false;
-      break;
-    default:
-      disable_epd = false;
-      break;
-  };
+  }
 
-  if(!disable_epd && bootanim > 0 && epd_enable > 0){
+
+  long t1 = __currentTime();
+  ALOGD("%s:line = %d cost_time=%ld us",__FUNCTION__,__LINE__, t1 - t0);
+
+  if(bootanim > 0 && epd_enable > 0){
     for (size_t i = 0; i < num_displays; ++i) {
         hwc_display_contents_1_t *dc = sf_display_contents[i];
 
@@ -3849,7 +4194,6 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
 
       for (size_t j = 0; j < num_dc_layers; ++j) {
         hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
-        dump_layer(ctx->gralloc, true, sf_layer, j);
         if (sf_layer != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
           if(sf_layer->acquireFenceFd > 0)
           {
@@ -3857,21 +4201,10 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
               close(sf_layer->acquireFenceFd);
               sf_layer->acquireFenceFd = -1;
           }
-          struct rk_ashmem_eink_t rk_ashmem_eink;
-          Region updateRegion;
-          Region currentA2Region;
-          struct region_buffer_t A2Region_buffer;
-          struct region_buffer_t UpdateRegion_buffer;
 
-          hwc_get_handle_EinkInfo(ctx->gralloc,sf_layer->handle,&rk_ashmem_eink);
-          ALOGD("DEBUG_lb einkMode = %d ",rk_ashmem_eink.mEinkMode);
-          unflattenRegion(rk_ashmem_eink.mA2Region,currentA2Region);
-          currentA2Region.dump("hwc unflattenRegion currentA2Region");
-          unflattenRegion(rk_ashmem_eink.mUpdateRegion,updateRegion);
-          updateRegion.dump("hwc unflattenRegion updateRegion");
           if(ctx->drm.isSupportRkRga())
           {
-            ret = hwc_set_epd(&hwc_info,sf_layer);
+            ret = hwc_set_epd(&hwc_info,sf_layer,currentA2Region,updateRegion);
             if (ret)
             {
               hwc_free_buffer(&hwc_info);
@@ -3900,6 +4233,8 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
       }
     }
   }
+  long t2 = __currentTime();
+  ALOGD("%s:line = %d cost_time=%ld us",__FUNCTION__,__LINE__, t2 - t1);
   return 0;
 #if 0
   std::vector<CheckedOutputFd> checked_output_fences;
@@ -4633,63 +4968,6 @@ static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   UN_USED(display);
   ALOGD("DEBUG_lb hwc_set_active_config mode = %d",index);
-
-  switch (index) {
-    case HWC_POWER_MODE_EPD_NULL:
-      gCurrentEpdMode = EPD_NULL;
-      break;
-    case HWC_POWER_MODE_EPD_AUTO:
-      gCurrentEpdMode = EPD_AUTO;
-      break;
-    case HWC_POWER_MODE_EPD_FULL:
-      gCurrentEpdMode = EPD_FULL;
-      break;
-    case HWC_POWER_MODE_EPD_A2:
-      gCurrentEpdMode = EPD_A2;
-      break;
-    case HWC_POWER_MODE_EPD_PART:
-      gCurrentEpdMode = EPD_PART;
-      break;
-    case HWC_POWER_MODE_EPD_FULL_DITHER:
-      gCurrentEpdMode = EPD_FULL_DITHER;
-      break;
-    case HWC_POWER_MODE_EPD_RESET:
-      gCurrentEpdMode = EPD_RESET;
-      break;
-    case HWC_POWER_MODE_EPD_BLACK_WHITE:
-      gCurrentEpdMode = EPD_BLACK_WHITE;
-      break;
-    case HWC_POWER_MODE_EPD_TEXT:
-      gCurrentEpdMode = EPD_TEXT;
-      break;
-    case HWC_POWER_MODE_EPD_BLOCK:
-      gCurrentEpdMode = EPD_BLOCK;
-      break;
-    case HWC_POWER_MODE_EPD_FULL_WIN:
-      gCurrentEpdMode = EPD_FULL_WIN;
-      break;
-    case HWC_POWER_MODE_EPD_OED_PART:
-      gCurrentEpdMode = EPD_OED_PART;
-      break;
-    case HWC_POWER_MODE_EPD_DIRECT_PART:
-      gCurrentEpdMode = EPD_DIRECT_PART;
-      break;
-    case HWC_POWER_MODE_EPD_DIRECT_A2:
-      gCurrentEpdMode = EPD_DIRECT_A2;
-      break;
-    case HWC_POWER_MODE_EPD_STANDBY:
-      gCurrentEpdMode = EPD_STANDBY;
-      hwc_post_epd_logo(STANDBY_IMAGE_PATH);
-      break;
-    case HWC_POWER_MODE_EPD_POWEROFF:
-      gCurrentEpdMode = EPD_POWEROFF;
-      hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
-      break;
-    case HWC_POWER_MODE_EPD_NOPOWER:
-      gCurrentEpdMode = EPD_NOPOWER;
-      hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
-      break;
-  };
 #if 0
   DrmConnector *c = ctx->drm.GetConnectorFromType(display);
   if (!c) {

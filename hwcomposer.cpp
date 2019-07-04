@@ -144,6 +144,8 @@ struct win_coordinate{
 	int y2;
 };
 
+#define USE_RGA 0
+
 #define GET_EBC_BUFFER 0x7000
 #define SET_EBC_SEND_BUFFER 0x7001
 #define GET_EBC_BUFFER_INFO 0x7003
@@ -169,8 +171,47 @@ static bool gPoweroff =false;
 
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
                                  int index);
-
 static int update_display_bestmode(hwc_drm_display_t *hd, int display, DrmConnector *c);
+
+
+extern "C" {
+    void neon_rgb888_to_gray256ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
+}
+extern "C" {
+    void neon_rgb888_to_gray256ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
+}
+extern "C" {
+    void neon_rgb888_to_gray16ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
+}
+extern "C" {
+    void neon_rgb888_to_gray16ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
+}
+
+extern "C" {
+    void neon_bgr888_to_gray16ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
+}
+extern "C" {
+    void neon_bgr888_to_gray16ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
+}
+
+
+
+extern "C" {
+    void neon_gray16_to_gray2ARM(uint8_t * dest,int w,int h);
+}
+extern "C" {
+    void neon_rgb256_to_gray16DITHER(int  *src, int *dst, short int *res0,  short int*res1, int w);
+}
+extern "C" {
+    void neon_gray256_to_gray16ARM_16(unsigned int * dest,unsigned int *  src,int h,int w,int vir_w);
+}
+extern "C" {
+    void neon_gray256_to_gray16ARM_32(unsigned int * dest,unsigned int *  src,int h,int w,int vir_w);
+}
+extern "C" {
+    void neon_gray256_to_gray256(int * dest,int *  src,int h,int w);
+}
+
 
 #if 1 //RGA_POLICY
 int hwc_set_epd(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t &fb_target,Region &A2Region,Region &updateRegion);
@@ -3562,6 +3603,151 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
   return 0;
 }
 
+void Rgb888_to_color_eink(char *dst,int *src,int  fb_height, int fb_width,int panel_h,int panel_w,int vir_width)
+{
+    int count;
+    int src_data;
+    int  g0, g1, g2, g3,g4,g5,g6,g7;
+    int i,j;
+    int *temp_src;
+    char *temp_dst;
+#if 1
+    for(i = 0; i < fb_height;i++){//RGB888->RGB444
+		temp_dst = dst;
+
+        for(j = 0; j<fb_width/2;j++){
+            src_data = *src++;
+            g0 =  (src_data&0xf0)>>4;
+            g1 = (src_data&0xf000)>>8;
+            g2 = (src_data&0xf00000)>>20;
+            src_data = *src++;
+            g3 =  src_data&0xf0;
+            g4 = (src_data&0xf000)>>12;
+            g5 = (src_data&0xf00000)>>16;
+            *dst++ = g0|g1;
+            *dst++ = g2|g3;
+            *dst++ = g4|g5;
+        }
+	  dst = temp_dst + vir_width/2;
+    }
+	#endif
+}
+
+void neon_rgb888_to_gray256ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w)
+{
+   if((vir_w % 32) == 0){
+        neon_rgb888_to_gray256ARM_32(dest,src,h,w,vir_w);
+    }
+    else{
+        neon_rgb888_to_gray256ARM_16(dest,src,h,w,vir_w);
+    }
+}
+
+void rgb888_to_gray16_dither(int *dst,uint8_t *src,int  panel_h, int panel_w,int vir_width)
+{
+    uint8_t *gray_256;
+    int h;
+    int w;
+    short int *line_buffer[2];
+    char *src_buffer;
+    gray_256 = (uint8_t*)malloc(panel_h*panel_w);
+    line_buffer[0] =(short int *) malloc(panel_w*2);
+    line_buffer[1] =(short int *) malloc(panel_w*2);
+    memset(line_buffer[0],0,panel_w*2);
+    memset(line_buffer[1],0,panel_w*2);
+    neon_rgb888_to_gray256ARM((uint8_t*)gray_256,(uint8_t*)src,panel_h,panel_w,vir_width);
+
+    src_buffer = (char*)gray_256;
+    for(h = 0;h<panel_h;h++){
+        Luma8bit_to_4bit_row_16((int*)src_buffer,dst,line_buffer[h&1],line_buffer[!(h&1)],panel_w);
+        dst = dst+panel_w/8;
+        src_buffer = (char*)src_buffer+panel_w;
+    }
+    free(line_buffer[0]);
+    free(line_buffer[1]);
+    free(gray_256);
+}
+
+void neon_rgb888_to_gray16ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w)
+{
+    if((vir_w % 32) == 0){
+        neon_rgb888_to_gray16ARM_32(dest,src,h,w,vir_w);
+    }
+    else{
+        neon_rgb888_to_gray16ARM_16(dest,src,h,w,vir_w);
+    }
+
+}
+
+void Luma8bit_to_4bit_dither(int *dst,int *src,int  vir_height, int vir_width,int panel_w)
+{
+    int h;
+    int w;
+    char *gray_256;
+    char *src_buffer;
+    short int *line_buffer[2];
+    gray_256 = (char*)malloc(vir_height*vir_width);
+    line_buffer[0] =(short int *) malloc(panel_w*2);
+    line_buffer[1] =(short int *) malloc(panel_w*2);
+    memset(line_buffer[0],0,panel_w*2);
+    memset(line_buffer[1],0,panel_w*2);
+
+    neon_gray256_to_gray256((int*)gray_256,(int*)src,vir_height,vir_width);
+    src_buffer = (char*)gray_256;
+    for(h = 0;h<vir_height;h++){
+        Luma8bit_to_4bit_row_16((int *)src_buffer,(int *)dst,line_buffer[h&1],line_buffer[!(h&1)],panel_w);
+        dst = dst+vir_width/8;
+        src_buffer = src_buffer+panel_w;//vir_width;
+    }
+    free(line_buffer[0]);
+    free(line_buffer[1]);
+    free(gray_256);
+}
+
+void rgb888_to_gray2_dither(uint8_t *dst, uint8_t *src, int panel_h, int panel_w,
+        int vir_width, Region region)
+{
+    //convert to gray 256.
+    uint8_t *gray_256;
+    gray_256 = (uint8_t*)malloc(panel_h*panel_w);
+    neon_rgb888_to_gray256ARM((uint8_t*)gray_256,(uint8_t*)src,panel_h,panel_w,panel_w);
+
+    //do dither
+    short int *line_buffer[2];
+    line_buffer[0] =(short int *) malloc(panel_w << 1);
+    line_buffer[1] =(short int *) malloc(panel_w << 1);
+
+    size_t count = 0;
+    const Rect* rects = region.getArray(&count);
+    for (int i = 0;i < (int)count;i++) {
+        memset(line_buffer[0], 0, panel_w << 1);
+        memset(line_buffer[1], 0, panel_w << 1);
+
+        int w = rects[i].right - rects[i].left;
+        int offset = rects[i].top * panel_w + rects[i].left;
+        int offset_dst = rects[i].top * vir_width + rects[i].left;
+        if (offset_dst % 2) {
+            offset_dst += (2 - offset_dst % 2);
+        }
+        if (offset % 2) {
+            offset += (2 - offset % 2);
+        }
+        if ((offset_dst + w) % 2) {
+            w -= (offset_dst + w) % 2;
+        }
+        for (int h = rects[i].top;h <= rects[i].bottom && h < panel_h;h++) {
+            //LOGE("jeffy Luma8bit_to_4bit_row_2, w:%d, offset:%d, offset_dst:%d", w, offset, offset_dst);
+            Luma8bit_to_4bit_row_2((short int*)(gray_256 + offset), (char*)(dst + (offset_dst >> 1)),
+                    line_buffer[h&1], line_buffer[!(h&1)], w, 0xff);
+            offset += panel_w;
+            offset_dst += vir_width;
+        }
+    }
+
+    free(line_buffer[0]);
+    free(line_buffer[1]);
+    free(gray_256);
+}
 
 void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_height, int vir_width,int panel_w)
 {
@@ -3608,6 +3794,12 @@ void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_heig
     }
 #endif
 #if 1
+    if((panel_w % 32) == 0){
+        neon_gray256_to_gray16ARM_32(graynew,gray8bit,vir_height,vir_width,panel_w);
+    }
+    else if((panel_w % 16) == 0){
+        neon_gray256_to_gray16ARM_16(graynew,gray8bit,vir_height,vir_width,panel_w);
+    }
 
     for(j=0; j<vir_height; j++) //c code
     {
@@ -3708,13 +3900,29 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
   return 0;
 }
 
-
 int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Region,Region &updateRegion) {
   int ret = 0;
   static int not_fullmode_count = 0;
   Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, hd->rgaBuffer_index);
+
+  int *gray16_buffer;
+
+  char value[PROPERTY_VALUE_MAX];
+  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+  //Get virtual address
+  const gralloc_module_t *gralloc;
+  ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                    (const hw_module_t **)&gralloc);
+  if (ret) {
+      ALOGE("Failed to open gralloc module");
+      return ret;
+  }
+
+  char* gray256_addr = NULL;
+
+#if USE_RGA
 
   DrmRgaBuffer &gra256_buffer = hd->rgaBuffers[hd->rgaBuffer_index];
   if (!gra256_buffer.Allocate(hd->framebuffer_width, hd->framebuffer_height, HAL_PIXEL_FORMAT_YCrCb_NV12)) {
@@ -3727,16 +3935,7 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Regio
     return ret;
   }
 
-  //Get virtual address
-  const gralloc_module_t *gralloc;
-  ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                    (const hw_module_t **)&gralloc);
-  if (ret) {
-      ALOGE("Failed to open gralloc module");
-      return ret;
-  }
 
-  char* gray256_addr;
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = gra256_buffer.buffer()->handle;
 
@@ -3749,7 +3948,22 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Regio
 
   gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&gray256_addr);
+#else
+  char* framebuffer_base = NULL;
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = fb_target->handle;
 
+  width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
+
+  gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                  0, 0, width, height, (void **)&framebuffer_base);
+
+#endif
 send_one_buffer:
 
   ALOGD("HWC >>>>>>>>>>>>>> begin post >>>>>>>>");
@@ -3778,15 +3992,9 @@ send_one_buffer:
       epdMode = EPD_A2;
   }
 
-
-  int *gray16_buffer;
-  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
   int *gray16_buffer_bak = gray16_buffer;
 
-  int *white_buffer;
-  white_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
-  memset(white_buffer,0xff,ebc_buf_info.width * ebc_buf_info.height >> 1);
-
+#if USE_RGA
   if (epdMode != EPD_A2)
   {
     if(epdMode == EPD_FULL_DITHER){
@@ -3853,7 +4061,6 @@ send_one_buffer:
               gSavedUpdateRegion.orSelf(gLastA2Region);
               gSavedUpdateRegion.orSelf(updateRegion);
 
-              char value[PROPERTY_VALUE_MAX];
               property_get("debug.lb.1", value, "0");
               int new_value = 0;
               new_value = atoi(value);
@@ -3892,19 +4099,6 @@ send_one_buffer:
                   //1.reset new region to white, and paint them.
                   apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
                           ebc_buf_info.vir_width, newUpdateRegion | newA2Region);
-                  property_get("debug.lb.2", value, "0");
-                  new_value = 0;
-                  new_value = atoi(value);
-                  if(new_value > 0){
-                      FILE *file = fopen("/data/gray2_dither_white.bin", "wb+");
-                      if (!file)
-                      {
-                          ALOGD("Could not open /data/data.bin\n");
-                      } else
-                      ALOGD("open /data/gray2_dither.bin and write ok\n");
-                      fwrite(gray16_buffer, ebc_buf_info.height * ebc_buf_info.width >> 1 , 1, file);
-                      fclose(file);
-                  }
                   epdMode = EPD_BLACK_WHITE;
                   ALOGD("DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
                   hwc_post_epd(gray16_buffer, postRect, epdMode);
@@ -3923,6 +4117,140 @@ send_one_buffer:
 
   }
 
+#else
+  //convent all to gray 16.
+  if (epdMode != EPD_A2)
+  {
+      if(ebc_buf_info.color_panel == 1)
+      {
+      int i;
+      int *temp_rgb;
+      int*temp_gray;
+      temp_rgb = (int*)(framebuffer_base);
+      temp_gray = (int*)gray16_buffer;
+          Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.height,ebc_buf_info.width,\
+              ebc_buf_info.vir_width);
+      }
+      else if(gPixel_format==8) {
+          if (epdMode == EPD_FULL_DITHER)
+          {
+              Luma8bit_to_4bit_dither((int*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.vir_height,ebc_buf_info.vir_width,ebc_buf_info.width);
+          }
+          else
+          {
+              Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(framebuffer_base),ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
+          }
+      }
+      else
+      {
+          if (epdMode == EPD_FULL_DITHER)
+          {
+              rgb888_to_gray16_dither((int*)gray16_buffer,(uint8_t*)(framebuffer_base), ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+          }
+          else
+          {
+              neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(framebuffer_base), ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+      }
+      }
+  }
+  switch(epdMode){
+        case EPD_FULL:
+        case EPD_FULL_WIN:
+        case EPD_FULL_DITHER:
+            //LOGE("jeffy FULL");
+            not_fullmode_count = 0;
+            break;
+        case EPD_A2:
+            {
+                ALOGD("DEBUG_lb %s,line = %d, epdMode %d",__FUNCTION__,__LINE__,epdMode);
+                Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+                screenRegion.dump("fremebuffer1 screenRegion");
+                if (screenRegion.subtract(A2Region).isEmpty() &&
+                        screenRegion.subtract(gLastA2Region).isEmpty()) {
+                    //all screen region was in a2 mode.
+                    screenRegion.dump("fremebuffer subtract screenRegion");
+                    rgb888_to_gray2_dither((uint8_t*)gray16_buffer,
+                                    (uint8_t*)framebuffer_base, ebc_buf_info.vir_height,
+                                    ebc_buf_info.width, ebc_buf_info.vir_width, screenRegion);
+                    break;
+                }
+                //window a2.
+                uint8_t *gray_256;
+			          gray_256 = (uint8_t*)malloc(ebc_buf_info.height * ebc_buf_info.width);
+                neon_rgb888_to_gray256ARM((uint8_t*)gray_256,
+                            (uint8_t*)framebuffer_base,
+                            ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+                Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray_256),
+                                  ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
+                if (A2Region.isEmpty()) {
+                   // ALOGE("jeffy quit A2");
+                    //get out a2 mode.
+                    //1.reset updated region to white.
+                    updateRegion.orSelf(gLastA2Region);
+                    updateRegion.orSelf(gSavedUpdateRegion);
+                    gLastA2Region.clear();
+                    gSavedUpdateRegion.clear();
+                    apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.width, updateRegion);
+
+                    //2.paint updated region.
+                    epdMode = EPD_A2;//EPD_BLACK_WHITE;//
+                    ALOGD("DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
+                    hwc_post_epd(gray16_buffer, postRect, epdMode);
+
+                    //3.will repaint those regions in full mode.
+                    gCurrentEpdMode = EPD_FULL_WIN;
+                    Rect rect = updateRegion.getBounds();
+                    postRect = rect;
+                    free(gray_256);
+                    goto    send_one_buffer;
+                }
+
+                Region newA2Region
+        = A2Region - gSavedUpdateRegion - gLastA2Region;
+
+                Region newUpdateRegion
+        = updateRegion - gSavedUpdateRegion - gLastA2Region;
+                newA2Region.dump("fremebuffer1 newA2Region");
+                newUpdateRegion.dump("fremebuffer1 newUpdateRegion");
+                A2Region.dump("fremebuffer1 currentA2Region");
+
+                //update saved region info.
+                gSavedUpdateRegion.orSelf(gLastA2Region);
+                gSavedUpdateRegion.orSelf(updateRegion);
+                gLastA2Region = A2Region;
+                gray256_to_gray2_dither((char *)gray_256,
+                        (char *)gray16_buffer, ebc_buf_info.vir_height,
+                       ( ebc_buf_info.color_panel ?ebc_buf_info.fb_width*3:ebc_buf_info.width), ebc_buf_info.vir_width,
+                        gSavedUpdateRegion);
+                if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
+                    //has new region.
+                    newA2Region.dump("fremebuffer2 newA2Region");
+                    newUpdateRegion.dump("fremebuffer2 newUpdateRegion");
+                    //1.reset new region to white, and paint them.
+                    apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
+                            ebc_buf_info.vir_width, newUpdateRegion | newA2Region);
+                    epdMode = EPD_BLACK_WHITE;
+                    ALOGD("DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
+                    hwc_post_epd(gray16_buffer, postRect, epdMode);
+                    //2.will repaint those regions in a2 mode.
+                    free(gray_256);
+                    goto    send_one_buffer;
+                }
+                //not_fullmode_count++;
+                break;
+            }
+        case EPD_BLOCK:
+           // release_wake_lock("show_advt_lock");
+        default:
+            //LOGE("jeffy part:%d", epdMode);
+            not_fullmode_count++;
+            break;
+
+    }
+
+
+#endif
+
   if(not_fullmode_count > 10){
       epdMode = EPD_FULL;
       not_fullmode_count =0;
@@ -3934,8 +4262,6 @@ send_one_buffer:
 
   gralloc->unlock(gralloc, src_hnd);
   free(gray16_buffer_bak);
-  free(white_buffer);
-  white_buffer = NULL;
   gray16_buffer_bak = NULL;
   gray16_buffer = NULL;
   return 0;

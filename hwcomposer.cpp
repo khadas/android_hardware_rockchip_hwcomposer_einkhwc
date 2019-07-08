@@ -167,7 +167,9 @@ static Region gLastA2Region;
 static Region gSavedUpdateRegion;
 static bool gFirst = true;
 static bool gPoweroff =false;
+static int gPowerMode = 0;
 
+static Mutex mEinkModeLock;
 
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
                                  int index);
@@ -4316,22 +4318,24 @@ int hwc_post_epd_logo(const char src_path[]){
 	/* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
   property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
   if(strcmp(isNeedWhiteScreenWithStandby, "y") == 0){
-      memset(gray16_buffer_bak, 0xff, ebc_buf_info.vir_width * ebc_buf_info.vir_height * 4);
+      memset(gray16_buffer_bak, 0xff, ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
       ALOGD("DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
       //EPD post
-      gCurrentEpdMode = EPD_BLOCK;
+      gCurrentEpdMode = EPD_BLACK_WHITE;
       Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
       ret = hwc_post_epd(gray16_buffer_bak,rect,gCurrentEpdMode);
   }
 
+  //Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
+  //                  ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
   gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-
   //EPD post
   gCurrentEpdMode = EPD_BLOCK;
   Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
-  ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_FULL);
+  ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_BLOCK);
   if(ret)
     ALOGD("hwc_post_epd fail\n");
+  gCurrentEpdMode = EPD_BLOCK;
   free(gray256_addr);
   gray256_addr = NULL;
 
@@ -4355,10 +4359,12 @@ static int unflattenRegion(const struct region_buffer_t &buffer, Region &region)
 
 static int hwc_handle_eink_mode(int mode){
 
-	/* when system power-off, refuse any display actions */
-	if(gPoweroff == true){
-		gCurrentEpdMode = EPD_NULL;
-		return 0;
+  if(gPowerMode == EPD_POWEROFF || gPowerMode == EPD_STANDBY || gPowerMode == EPD_NOPOWER)
+  {
+      ALOGD("DEBUG_lb %s,line=%d gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,gPowerMode,gCurrentEpdMode);
+      gCurrentEpdMode = EPD_BLOCK;
+      return 0;
+    ALOGD("DEBUG_lb %s,line = %d, mode = %d ,gPowerMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode);
   }
 
   switch (mode) {
@@ -4408,18 +4414,17 @@ static int hwc_handle_eink_mode(int mode){
       gCurrentEpdMode = EPD_DIRECT_A2;
       break;
     case HWC_POWER_MODE_EPD_STANDBY:
-      gCurrentEpdMode = EPD_STANDBY;
-      hwc_post_epd_logo(STANDBY_IMAGE_PATH);
+      //gCurrentEpdMode = EPD_STANDBY;
+      //hwc_post_epd_logo(STANDBY_IMAGE_PATH);
       isOutingoffStandbyFlag = true;
       break;
     case HWC_POWER_MODE_EPD_POWEROFF:
-      gCurrentEpdMode = EPD_POWEROFF;
-      gResetEpdMode = EPD_POWEROFF;
-      hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+      //gCurrentEpdMode = EPD_POWEROFF;
+      //hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
       break;
     case HWC_POWER_MODE_EPD_NOPOWER:
-      gCurrentEpdMode = EPD_NOPOWER;
-      hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
+      //gCurrentEpdMode = EPD_NOPOWER;
+      //hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
       break;
   };
 
@@ -4436,17 +4441,18 @@ static inline long __currentTime()
 static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
                    hwc_display_contents_1_t **sf_display_contents) {
   ATRACE_CALL();
+  Mutex::Autolock lock(mEinkModeLock);
   long t0 = __currentTime();
 
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   int ret = 0;
   inc_frame();
   char value[PROPERTY_VALUE_MAX];
-  property_get("debug.enable", value, "0");
-  int epd_enable = atoi(value);
+//  property_get("debug.enable", value, "0");
+//  int epd_enable = atoi(value);
 
-  property_get("service.bootanim.exit", value, "0");
-  int bootanim = atoi(value);
+//  property_get("service.bootanim.exit", value, "0");
+//  int bootanim = atoi(value);
 
 
   static int not_fullmode_count;
@@ -4509,7 +4515,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   long t1 = __currentTime();
   ALOGD("%s:line = %d cost_time=%ld us",__FUNCTION__,__LINE__, t1 - t0);
 
-  if(bootanim > 0 && epd_enable > 0){
+  if(gCurrentEpdMode != EPD_BLOCK){
     for (size_t i = 0; i < num_displays; ++i) {
         hwc_display_contents_1_t *dc = sf_display_contents[i];
 
@@ -4520,7 +4526,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
 
       for (size_t j = 0; j < num_dc_layers; ++j) {
         hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
-        if (sf_layer != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
+        if (sf_layer != NULL && sf_layer->handle != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
           if(sf_layer->acquireFenceFd > 0)
           {
               sync_wait(sf_layer->acquireFenceFd, -1);
@@ -4996,9 +5002,31 @@ static int hwc_event_control(struct hwc_composer_device_1 *dev, int display,
 
 static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
                               int mode) {
-
+  Mutex::Autolock lock(mEinkModeLock);
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   ALOGD("DEBUG_lb %s,line = %d , display = %d ,mode = %d",__FUNCTION__,__LINE__,display,mode);
+
+  switch (mode) {
+    case HWC_POWER_MODE_OFF:
+      gPowerMode = EPD_POWEROFF;
+      ALOGD("DEBUG_lb %s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
+      gCurrentEpdMode = EPD_BLOCK;
+      hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+      break;
+    /* We can't support dozing right now, so go full on */
+    case HWC_POWER_MODE_DOZE:
+      gPowerMode = EPD_STANDBY;
+      gCurrentEpdMode = EPD_BLOCK;
+      ALOGD("DEBUG_lb %s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
+      hwc_post_epd_logo(STANDBY_IMAGE_PATH);
+      break;
+    case HWC_POWER_MODE_DOZE_SUSPEND:
+    case HWC_POWER_MODE_NORMAL:
+      gPowerMode = EPD_PART;
+      gCurrentEpdMode = EPD_PART;
+      break;
+  };
+
 
 #if 0
   uint64_t dpmsValue = 0;

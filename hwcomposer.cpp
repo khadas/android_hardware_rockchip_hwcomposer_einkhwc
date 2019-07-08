@@ -4249,11 +4249,9 @@ send_one_buffer:
             break;
 
     }
-
-
 #endif
 
-  if(not_fullmode_count > 10){
+  if(not_fullmode_count > 50){
       epdMode = EPD_FULL;
       not_fullmode_count =0;
   }

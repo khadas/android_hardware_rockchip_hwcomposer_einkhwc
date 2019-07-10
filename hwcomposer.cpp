@@ -144,7 +144,7 @@ struct win_coordinate{
 	int y2;
 };
 
-#define USE_RGA 0
+#define USE_RGA 1
 
 #define GET_EBC_BUFFER 0x7000
 #define SET_EBC_SEND_BUFFER 0x7001
@@ -3185,7 +3185,6 @@ int hwc_rgba888_to_gray256(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t *fb_target,hwc_
     src.fd = -1;
     dst.fd = -1;
 
-
     //Get virtual address
     const gralloc_module_t *gralloc;
     ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
@@ -3247,8 +3246,8 @@ int hwc_rgba888_to_gray256(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t *fb_target,hwc_
         ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
             strerror(errno), (void*)fb_target->handle, (void*)(rgaBuffer.buffer()->handle));
     }
+    DumpLayer("yuv", dst.hnd);
 
-    DumpLayer("rga", dst.hnd);
 
     return ret;
 }
@@ -3443,63 +3442,28 @@ int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h,
 
   return 0;
 }
+
 int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
 
-  int src_data;
+  char src_data;
   char  g0,g3;
   char *temp_dst = (char *)gray16_buffer;
 
-//  char value[PROPERTY_VALUE_MAX];
-//  property_get("debug.gray", value, "0");
-//  int new_value = 0;
-//  new_value = atoi(value);
-//  if(new_value == 0){
+  ALOGD("DEBUG_lb sizeof char = %d",sizeof(char));
   for(int i = 0; i < h;i++){
       for(int j = 0; j< w / 2;j++){
-          src_data = *gray256_addr++;
+          src_data = *gray256_addr;
           g0 =  (src_data&0xf0)>>4;
-          src_data = *gray256_addr++;
+          gray256_addr++;
+
+          src_data = *gray256_addr;
           g3 =  src_data&0xf0;
-          *temp_dst++ = g0|g3;
+          gray256_addr++;
+          *temp_dst = g0|g3;
+          temp_dst++;
       }
-      gray256_addr += (vir_w - w);
+      //gray256_addr += (vir_w - w);
   }
-//  }
-//  else if(new_value == 1)
-//  {
-//      int i = 0, j = 0;
-//      for(i = 0; i < ebc_buf_info.fb_height;i++){
-//          for(j = 0; j<ebc_buf_info.fb_width / 4;j++){
-//              g0 =  (src_data&0xf0)>>4;
-//              src_data = *gray256_addr++;
-//              g3 =  src_data&0xf0;
-//              src_data = *gray256_addr++;
-//              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
-//          }
-//          for(j = ebc_buf_info.fb_width / 4; j<ebc_buf_info.fb_width / 2;j++){
-//              g0 =  (src_data&0xf0)>>4;
-//              src_data = *gray256_addr++;
-//              g3 =  src_data&0xf0;
-//              src_data = *gray256_addr++;
-//              *temp_dst++ = g0|g3;
-//          }
-//          gray256_addr += (vir_w - w);
-//      }
-
-//  }else{
-//      for(int i = 0; i < ebc_buf_info.fb_height;i++){
-//          for(int j = 0; j<ebc_buf_info.fb_width / 2;j++){
-//              g0 =  (src_data&0xf0)>>4;
-//              src_data = *gray256_addr++;
-//              g3 =  src_data&0xf0;
-//              src_data = *gray256_addr++;
-//              *temp_dst++ = (g0 > 0x8 ?0xf:0x0)| (g3 > 0x80 ?0xf0:0x0);
-//          }
-//          gray256_addr += (vir_w - w);
-//      }
-
-//  }
-
   return 0;
 
 }
@@ -3886,7 +3850,11 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
           ALOGW("open %s and write ok\n",data_name);
           fwrite(buffer, buf_info.vir_height * buf_info.vir_width >> 1 , 1, file);
           fclose(file);
+
+      }
+      if(DumpSurfaceCount > 20){
           property_set("debug.dump","0");
+          DumpSurfaceCount = 0;
       }
   }
 
@@ -3904,9 +3872,12 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
   return 0;
 }
 
+
+static int not_fullmode_count = 0;
+
+
 int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Region,Region &updateRegion) {
   int ret = 0;
-  static int not_fullmode_count = 0;
   Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, hd->rgaBuffer_index);
@@ -3925,6 +3896,8 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Regio
   }
 
   char* gray256_addr = NULL;
+
+  DumpLayer("rgba", fb_target->handle);
 
 #if USE_RGA
 
@@ -4001,10 +3974,18 @@ send_one_buffer:
 #if USE_RGA
   if (epdMode != EPD_A2)
   {
-    if(epdMode == EPD_FULL_DITHER){
+    if(1/*epdMode == EPD_FULL_DITHER*/){
       gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
     }else{
-      gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+      gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+#if USE_NENO_TO_Y16
+      if((ebc_buf_info.width % 32) == 0){
+        neon_gray256_to_gray16ARM_32((unsigned int *)gray16_buffer,(unsigned int *)gray256_addr,ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
+      }
+      else if((ebc_buf_info.width % 16) == 0){
+          neon_gray256_to_gray16ARM_16((unsigned int *)gray16_buffer,(unsigned int *)gray256_addr,ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
+      }
+#endif
     }
   }
 
@@ -4306,7 +4287,7 @@ int hwc_post_epd_logo(const char src_path[]){
   Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
   ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_BLOCK);
   if(ret)
-    ALOGD("hwc_post_epd fail\n");
+    ALOGE("hwc_post_epd fail\n");
   gCurrentEpdMode = EPD_BLOCK;
   free(gray256_addr);
   gray256_addr = NULL;
@@ -4980,8 +4961,9 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       break;
     case HWC_POWER_MODE_DOZE_SUSPEND:
     case HWC_POWER_MODE_NORMAL:
-      gPowerMode = EPD_PART;
-      gCurrentEpdMode = EPD_PART;
+      gPowerMode = EPD_FULL;
+      gCurrentEpdMode = EPD_FULL;
+      not_fullmode_count = 50;
       break;
   };
 

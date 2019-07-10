@@ -89,7 +89,7 @@ void init_rk_debug()
  * @param layer 		layer data
  * @return 				Errno no
  */
-#define DUMP_LAYER_CNT (10)
+#define DUMP_LAYER_CNT (20)
 static int DumpSurfaceCount = 0;
 int DumpLayer(const char* layer_name,buffer_handle_t handle)
 {
@@ -129,7 +129,7 @@ int DumpLayer(const char* layer_name,buffer_handle_t handle)
 #endif
         system("mkdir /data/dump/ && chmod /data/dump/ 777 ");
         DumpSurfaceCount++;
-        sprintf(data_name,"/data/dump/dmlayer%d_%d_%d.bin", DumpSurfaceCount,
+        sprintf(data_name,"/data/dump/dmlayer%s_%d_%d_%d.bin",layer_name, DumpSurfaceCount,
                 stride,height);
         gralloc->lock(gralloc, handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                         0, 0, width, height, (void **)&cpu_addr);

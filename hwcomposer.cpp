@@ -3449,7 +3449,6 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
   char  g0,g3;
   char *temp_dst = (char *)gray16_buffer;
 
-  ALOGD("DEBUG_lb sizeof char = %d",sizeof(char));
   for(int i = 0; i < h;i++){
       for(int j = 0; j< w / 2;j++){
           src_data = *gray256_addr;
@@ -3974,7 +3973,7 @@ send_one_buffer:
 #if USE_RGA
   if (epdMode != EPD_A2)
   {
-    if(1/*epdMode == EPD_FULL_DITHER*/){
+    if(epdMode == EPD_FULL_DITHER){
       gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
     }else{
       gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);

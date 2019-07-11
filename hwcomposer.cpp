@@ -4431,8 +4431,14 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
         if(log_level(DBG_DEBUG)){
           currentA2Region.dump("HWC unflattenRegion currentA2Region");
           updateRegion.dump("HWC unflattenRegion updateRegion");
+          ALOGD("DEBUG_lb currentA2Region.isEmpty = %d , updateRegion.isEmpty = %d",currentA2Region.isEmpty(),updateRegion.isEmpty());
         }
+        //If currentA2Region and updateRegion is empty, skip this frame.
+        if(currentA2Region.isEmpty() && updateRegion.isEmpty())
+        {
+            requestEpdMode = EPD_BLOCK;
 
+        }
         long t4 = __currentTime();
         ALOGD_IF(log_level(DBG_DEBUG),"%s:line = %d get EinkInfo from ashmem cost_time=%ld us",__FUNCTION__,__LINE__, t4 - t3);
       }

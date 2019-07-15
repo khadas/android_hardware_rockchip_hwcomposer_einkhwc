@@ -4208,9 +4208,14 @@ send_one_buffer:
     }
 #endif
 
-  if(not_fullmode_count > 50){
+  char pro_value[PROPERTY_VALUE_MAX];
+
+  property_get("persist.vendor.fullmode_cnt",pro_value,"500");
+
+
+  if(not_fullmode_count > atoi(pro_value)){
       epdMode = EPD_FULL;
-      not_fullmode_count =0;
+      not_fullmode_count = 0;
   }
   hwc_post_epd(gray16_buffer_bak, postRect, epdMode);
 
@@ -5259,6 +5264,7 @@ static int hwc_get_active_config(struct hwc_composer_device_1 *dev,
                                  int display) {
   UN_USED(dev);
   UN_USED(display);
+  ALOGD_IF(log_level(DBG_DEBUG),"DEBUG_lb getActiveConfig mode = %d",gCurrentEpdMode);
   return gCurrentEpdMode;
 }
 

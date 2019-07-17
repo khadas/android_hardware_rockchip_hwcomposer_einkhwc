@@ -3424,6 +3424,8 @@ void Luma8bit_to_4bit_row_16(int  *src,  int *dst, short int *res0,  short int*r
 
 int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
 
+  ATRACE_CALL();
+
   UN_USED(vir_width);
   int h;
   int w;
@@ -3446,6 +3448,7 @@ int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h,
 }
 
 int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
+  ATRACE_CALL();
 
   char src_data;
   char  g0,g3;
@@ -3473,9 +3476,9 @@ int gray256_to_gray2(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w
 
   ATRACE_CALL();
 
-  char src_data;
-  char  g0,g3;
-  char *temp_dst = (char *)gray16_buffer;
+  unsigned char src_data;
+  unsigned char  g0,g3;
+  unsigned char *temp_dst = (unsigned char *)gray16_buffer;
 
   for(int i = 0; i < h;i++){
       for(int j = 0; j< w / 2;j++){
@@ -3560,6 +3563,8 @@ void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short
 }
 
 int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, int panel_w,int vir_width,Region region){
+
+    ATRACE_CALL();
 
     //do dither
     short int *line_buffer[2];
@@ -3746,6 +3751,8 @@ void rgb888_to_gray2_dither(uint8_t *dst, uint8_t *src, int panel_h, int panel_w
 
 void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_height, int vir_width,int panel_w)
 {
+    ATRACE_CALL();
+
     int i,j;
     unsigned int  g0, g1, g2, g3,g4,g5,g6,g7;
     unsigned int *gray_new_temp;
@@ -4005,7 +4012,33 @@ send_one_buffer:
 #if USE_RGA
   if(epdMode == EPD_AUTO)
   {
-     gray256_to_gray2(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+
+    char pro_value[PROPERTY_VALUE_MAX];
+    property_get("debug.auto",pro_value,"0");
+    switch(atoi(pro_value)){
+      case 0:
+        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+        break;
+      case 1:
+        gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+        break;
+      case 2:
+        Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
+                          ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
+        break;
+      case 3:
+        gray256_to_gray2_dither((char *)gray256_addr,
+              (char *)gray16_buffer, ebc_buf_info.vir_height,
+              (ebc_buf_info.color_panel ? ebc_buf_info.fb_width * 3: ebc_buf_info.width),
+              ebc_buf_info.vir_width, AutoRegion);
+        break;
+      case 4:
+        gray256_to_gray2(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+        break;
+      default:
+        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+        break;
+    }
   }
   else if (epdMode != EPD_A2)
   {
@@ -4245,7 +4278,6 @@ send_one_buffer:
 #endif
 
   char pro_value[PROPERTY_VALUE_MAX];
-
   property_get("persist.vendor.fullmode_cnt",pro_value,"500");
 
 

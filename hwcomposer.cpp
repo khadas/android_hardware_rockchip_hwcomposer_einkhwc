@@ -216,7 +216,7 @@ extern "C" {
 
 
 #if 1 //RGA_POLICY
-int hwc_set_epd(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t &fb_target,Region &A2Region,Region &updateRegion);
+int hwc_set_epd(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t &fb_target,Region &A2Region,Region &updateRegion,Region &AutoRegion);
 int hwc_rgba888_to_gray256(hwc_drm_display_t *hd, hwc_layer_1_t &fb_target);
 void hwc_free_buffer(hwc_drm_display_t *hd);
 #endif
@@ -3172,6 +3172,8 @@ void signal_all_fence(DrmHwcDisplayContents &display_contents,hwc_display_conten
 
 #if 1 //RGA_POLICY
 int hwc_rgba888_to_gray256(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t *fb_target,hwc_drm_display_t *hd) {
+    ATRACE_CALL();
+
     int ret = 0;
     int rga_transform = 0;
     int src_l,src_t,src_w,src_h;
@@ -3466,6 +3468,33 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
   return 0;
 
 }
+
+int gray256_to_gray2(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
+
+  ATRACE_CALL();
+
+  char src_data;
+  char  g0,g3;
+  char *temp_dst = (char *)gray16_buffer;
+
+  for(int i = 0; i < h;i++){
+      for(int j = 0; j< w / 2;j++){
+          src_data = *gray256_addr;
+          g0 = src_data > 0x80 ? 0xf0 : 0x00;
+          gray256_addr++;
+
+          src_data = *gray256_addr;
+          g3 =  src_data > 0x80 ? 0xf : 0x0;
+          gray256_addr++;
+          *temp_dst = g0|g3;
+          temp_dst++;
+      }
+      //gray256_addr += (vir_w - w);
+  }
+  return 0;
+
+}
+
 void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short int*res1, int w,int threshold)
 {
     int i;
@@ -3814,6 +3843,7 @@ static inline void apply_white_region(char *buffer, int height, int width, Regio
 
 
 int hwc_post_epd(int *buffer, Rect rect, int mode){
+  ATRACE_CALL();
 
   struct ebc_buf_info buf_info;
 
@@ -3875,7 +3905,9 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
 static int not_fullmode_count = 0;
 
 
-int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Region,Region &updateRegion) {
+int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Region,Region &updateRegion,Region &AutoRegion) {
+  ATRACE_CALL();
+
   int ret = 0;
   Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
 
@@ -3971,7 +4003,11 @@ send_one_buffer:
   int *gray16_buffer_bak = gray16_buffer;
 
 #if USE_RGA
-  if (epdMode != EPD_A2)
+  if(epdMode == EPD_AUTO)
+  {
+     gray256_to_gray2(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+  }
+  else if (epdMode != EPD_A2)
   {
     if(epdMode == EPD_FULL_DITHER){
       gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
@@ -4406,6 +4442,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
 
   Region updateRegion;
   Region currentA2Region;
+  Region currentAutoRegion;
   int requestEpdMode;
   Rect postRect = Rect(0, 0, ebc_buf_info.vir_width, ebc_buf_info.vir_height);
 
@@ -4432,10 +4469,12 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
         requestEpdMode = rk_ashmem_eink.mEinkMode;
         unflattenRegion(rk_ashmem_eink.mA2Region,currentA2Region);
         unflattenRegion(rk_ashmem_eink.mUpdateRegion,updateRegion);
+        unflattenRegion(rk_ashmem_eink.mAutoRegion,currentAutoRegion);
 
         if(log_level(DBG_DEBUG)){
           currentA2Region.dump("HWC unflattenRegion currentA2Region");
           updateRegion.dump("HWC unflattenRegion updateRegion");
+          currentAutoRegion.dump("HWC unflattenRegion currentAutoRegion");
           ALOGD("DEBUG_lb currentA2Region.isEmpty = %d , updateRegion.isEmpty = %d",currentA2Region.isEmpty(),updateRegion.isEmpty());
         }
         //If currentA2Region and updateRegion is empty, skip this frame.
@@ -4484,7 +4523,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
 
           if(ctx->drm.isSupportRkRga())
           {
-            ret = hwc_set_epd(&hwc_info,sf_layer,currentA2Region,updateRegion);
+            ret = hwc_set_epd(&hwc_info,sf_layer,currentA2Region,updateRegion,currentAutoRegion);
             if (ret)
             {
               hwc_free_buffer(&hwc_info);

@@ -45,6 +45,7 @@
 #include "drmresources.h"
 #include "platform.h"
 #include "virtualcompositorworker.h"
+#include "einkcompositorworker.h"
 #include "vsyncworker.h"
 
 #include <stdlib.h>
@@ -100,7 +101,7 @@
 #define UM_PER_INCH 25400
 
 namespace android {
-
+#ifndef ANDROID_EINK_COMPOSITOR_WORKER_H_
 
 #define EPD_NULL            (-1)
 #define EPD_AUTO            (0)
@@ -144,27 +145,33 @@ struct win_coordinate{
 	int y2;
 };
 
+
 #define USE_RGA 1
 
 #define GET_EBC_BUFFER 0x7000
 #define SET_EBC_SEND_BUFFER 0x7001
 #define GET_EBC_BUFFER_INFO 0x7003
 
+#endif
+
 
 #define POWEROFF_IMAGE_PATH "/vendor/media/poweroff.jpg"
 #define NOPOWER_IMAGE_PATH "/vendor/media/nopower.jpg"
 #define STANDBY_IMAGE_PATH "/vendor/media/standby.jpg"
 
-static int gPixel_format = 24;
+int gPixel_format = 24;
 
-void *ebc_buffer_base = NULL;
+
 int ebc_fd = -1;
+void *ebc_buffer_base = NULL;
 struct ebc_buf_info ebc_buf_info;
+
 static int gLastEpdMode = EPD_PART;
 static int gCurrentEpdMode = EPD_PART;
 static int gResetEpdMode = EPD_PART;
 static Region gLastA2Region;
 static Region gSavedUpdateRegion;
+
 static bool gFirst = true;
 static bool gPoweroff =false;
 static int gPowerMode = 0;
@@ -195,7 +202,6 @@ extern "C" {
 extern "C" {
     void neon_bgr888_to_gray16ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
 }
-
 
 
 extern "C" {
@@ -530,6 +536,7 @@ struct hwc_context_t {
   const gralloc_module_t *gralloc;
   DummySwSyncTimeline dummy_timeline;
   VirtualCompositorWorker virtual_compositor_worker;
+  EinkCompositorWorker eink_compositor_worker;
   DrmHotplugHandler hotplug_handler;
   VSyncWorker primary_vsync_worker;
   VSyncWorker extend_vsync_worker;
@@ -552,6 +559,11 @@ struct hwc_context_t {
     //int fd_3d;
     //threadPamaters mControlStereo;
 #endif
+
+    int ebc_fd = -1;
+    void *ebc_buffer_base = NULL;
+    struct ebc_buf_info ebc_buf_info;
+
 
     std::vector<DrmCompositionDisplayPlane> comp_plane_group;
     std::vector<DrmHwcDisplayContents> layer_contents;
@@ -3562,6 +3574,88 @@ void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short
 
 }
 
+void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_height, int vir_width,int panel_w)
+{
+    ATRACE_CALL();
+
+    int i,j;
+    unsigned int  g0, g1, g2, g3,g4,g5,g6,g7;
+    unsigned int *gray_new_temp;
+#if 0
+    for(j=0; j<vir_height; j++) //c code
+    {
+        gray_new_temp = graynew;
+        for(i=0; i<panel_w; i+=16)
+        {
+            g0 = (*gray8bit & 0x000000f0) >> 4;
+            g1 = (*gray8bit & 0x0000f000) >> 8;
+            g2 = (*gray8bit & 0x00f00000) >> 12;
+            g3 = (*gray8bit & 0xf0000000) >> 16;
+            gray8bit++;
+
+            g4 = (*gray8bit & 0x000000f0) << 12;
+            g5 = (*gray8bit & 0x0000f000) << 8;
+            g6 = (*gray8bit & 0x00f00000) << 4;
+            g7 = (*gray8bit & 0xf0000000) ;
+            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
+            gray8bit++;
+
+            g0 = (*gray8bit & 0x000000f0) >> 4;
+            g1 = (*gray8bit & 0x0000f000) >> 8;
+            g2 = (*gray8bit & 0x00f00000) >> 12;
+            g3 = (*gray8bit & 0xf0000000) >> 16;
+            gray8bit++;
+
+            g4 = (*gray8bit & 0x000000f0) << 12;
+            g5 = (*gray8bit & 0x0000f000) << 8;
+            g6 = (*gray8bit & 0x00f00000) << 4;
+            g7 = (*gray8bit & 0xf0000000) ;
+            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
+            gray8bit++;
+
+
+        }
+
+        gray_new_temp += vir_width>>3;
+        graynew = gray_new_temp;
+    }
+#endif
+#if 1
+    if((panel_w % 32) == 0){
+        neon_gray256_to_gray16ARM_32(graynew,gray8bit,vir_height,vir_width,panel_w);
+    }
+    else if((panel_w % 16) == 0){
+        neon_gray256_to_gray16ARM_16(graynew,gray8bit,vir_height,vir_width,panel_w);
+    }
+
+    for(j=0; j<vir_height; j++) //c code
+    {
+        gray_new_temp = graynew;
+        for(i=0; i<panel_w; i+=8)
+        {
+            g0 = (*gray8bit & 0x000000f0) >> 4;
+            g1 = (*gray8bit & 0x0000f000) >> 8;
+            g2 = (*gray8bit & 0x00f00000) >> 12;
+            g3 = (*gray8bit & 0xf0000000) >> 16;
+            gray8bit++;
+
+            g4 = (*gray8bit & 0x000000f0) << 12;
+            g5 = (*gray8bit & 0x0000f000) << 8;
+            g6 = (*gray8bit & 0x00f00000) << 4;
+            g7 = (*gray8bit & 0xf0000000) ;
+            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
+            gray8bit++;
+
+        }
+
+        gray_new_temp += vir_width>>3;
+        graynew = gray_new_temp;
+    }
+
+#endif
+}
+
+
 int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, int panel_w,int vir_width,Region region){
 
     ATRACE_CALL();
@@ -3747,87 +3841,6 @@ void rgb888_to_gray2_dither(uint8_t *dst, uint8_t *src, int panel_h, int panel_w
     free(line_buffer[0]);
     free(line_buffer[1]);
     free(gray_256);
-}
-
-void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_height, int vir_width,int panel_w)
-{
-    ATRACE_CALL();
-
-    int i,j;
-    unsigned int  g0, g1, g2, g3,g4,g5,g6,g7;
-    unsigned int *gray_new_temp;
-#if 0
-    for(j=0; j<vir_height; j++) //c code
-    {
-        gray_new_temp = graynew;
-        for(i=0; i<panel_w; i+=16)
-        {
-            g0 = (*gray8bit & 0x000000f0) >> 4;
-            g1 = (*gray8bit & 0x0000f000) >> 8;
-            g2 = (*gray8bit & 0x00f00000) >> 12;
-            g3 = (*gray8bit & 0xf0000000) >> 16;
-            gray8bit++;
-
-            g4 = (*gray8bit & 0x000000f0) << 12;
-            g5 = (*gray8bit & 0x0000f000) << 8;
-            g6 = (*gray8bit & 0x00f00000) << 4;
-            g7 = (*gray8bit & 0xf0000000) ;
-            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
-            gray8bit++;
-
-            g0 = (*gray8bit & 0x000000f0) >> 4;
-            g1 = (*gray8bit & 0x0000f000) >> 8;
-            g2 = (*gray8bit & 0x00f00000) >> 12;
-            g3 = (*gray8bit & 0xf0000000) >> 16;
-            gray8bit++;
-
-            g4 = (*gray8bit & 0x000000f0) << 12;
-            g5 = (*gray8bit & 0x0000f000) << 8;
-            g6 = (*gray8bit & 0x00f00000) << 4;
-            g7 = (*gray8bit & 0xf0000000) ;
-            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
-            gray8bit++;
-
-
-        }
-
-        gray_new_temp += vir_width>>3;
-        graynew = gray_new_temp;
-    }
-#endif
-#if 1
-    if((panel_w % 32) == 0){
-        neon_gray256_to_gray16ARM_32(graynew,gray8bit,vir_height,vir_width,panel_w);
-    }
-    else if((panel_w % 16) == 0){
-        neon_gray256_to_gray16ARM_16(graynew,gray8bit,vir_height,vir_width,panel_w);
-    }
-
-    for(j=0; j<vir_height; j++) //c code
-    {
-        gray_new_temp = graynew;
-        for(i=0; i<panel_w; i+=8)
-        {
-            g0 = (*gray8bit & 0x000000f0) >> 4;
-            g1 = (*gray8bit & 0x0000f000) >> 8;
-            g2 = (*gray8bit & 0x00f00000) >> 12;
-            g3 = (*gray8bit & 0xf0000000) >> 16;
-            gray8bit++;
-
-            g4 = (*gray8bit & 0x000000f0) << 12;
-            g5 = (*gray8bit & 0x0000f000) << 8;
-            g6 = (*gray8bit & 0x00f00000) << 4;
-            g7 = (*gray8bit & 0xf0000000) ;
-            *graynew++ = g0 | g1 | g2 | g3 | g4 |g5 | g6 | g7;
-            gray8bit++;
-
-        }
-
-        gray_new_temp += vir_width>>3;
-        graynew = gray_new_temp;
-    }
-
-#endif
 }
 
 static inline void apply_white_region(char *buffer, int height, int width, Region region)
@@ -4546,24 +4559,24 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
       for (size_t j = 0; j < num_dc_layers; ++j) {
         hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
         if (sf_layer != NULL && sf_layer->handle != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
-          if(sf_layer->acquireFenceFd > 0)
-          {
-              sync_wait(sf_layer->acquireFenceFd, -1);
-              close(sf_layer->acquireFenceFd);
-              sf_layer->acquireFenceFd = -1;
-          }
-
-          if(ctx->drm.isSupportRkRga())
-          {
-            ret = hwc_set_epd(&hwc_info,sf_layer,currentA2Region,updateRegion,currentAutoRegion);
-            if (ret)
+          char value[PROPERTY_VALUE_MAX];
+          property_get("debug.enable.worker", value, "1");
+          if(atoi(value) == 1)
+            ctx->eink_compositor_worker.QueueComposite(dc,currentA2Region,updateRegion,currentAutoRegion,gCurrentEpdMode,gResetEpdMode);
+          else if(atoi(value) == 0){
+            if(ctx->drm.isSupportRkRga())
             {
-              hwc_free_buffer(&hwc_info);
-              return ret;
+              ret = hwc_set_epd(&hwc_info,sf_layer,currentA2Region,updateRegion,currentAutoRegion);
+              if (ret)
+              {
+                hwc_free_buffer(&hwc_info);
+                return ret;
+              }
             }
           }
         }
       }
+
     }
   }else{
     ALOGD_IF(log_level(DBG_DEBUG),"%s:line = %d, gCurrentEpdMode = %d,skip this frame = %d",__FUNCTION__,__LINE__,gCurrentEpdMode,get_frame());
@@ -5464,6 +5477,11 @@ static int hwc_initialize_display(struct hwc_context_t *ctx, int display) {
 
 static int hwc_enumerate_displays(struct hwc_context_t *ctx) {
   int ret, num_connectors = 0;
+  ret = ctx->eink_compositor_worker.Init(ctx);
+  if (ret) {
+    ALOGE("Failed to initialize virtual compositor worker");
+    return ret;
+  }
 
   for (auto &conn : ctx->drm.connectors()) {
     ret = hwc_initialize_display(ctx, conn->display());
@@ -5501,11 +5519,11 @@ static int hwc_enumerate_displays(struct hwc_context_t *ctx) {
     }
   }
 
-  ret = ctx->virtual_compositor_worker.Init();
-  if (ret) {
-    ALOGE("Failed to initialize virtual compositor worker");
-    return ret;
-  }
+//  ret = ctx->virtual_compositor_worker.Init();
+//  if (ret) {
+//    ALOGE("Failed to initialize virtual compositor worker");
+//    return ret;
+//  }
   return 0;
 }
 
@@ -5662,9 +5680,6 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
          ALOGE("Open hdmi_status_fd fail in %s",__FUNCTION__);
          //return -1;
     }
-
-
-
     ebc_fd = open("/dev/ebc", O_RDWR,0);
     if (ebc_fd < 0){
         ALOGE("DEBUG_lb open /dev/ebc failed\n");
@@ -5677,6 +5692,7 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
     if (ebc_buffer_base == MAP_FAILED) {
         ALOGE("DEBUG_lb Error mapping the ebc buffer (%s)\n", strerror(errno));
     }
+
 
 #if RK_CTS_WORKROUND
     ctx->regFile = fopen(VIEW_CTS_FILE, "r");

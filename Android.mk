@@ -97,7 +97,8 @@ LOCAL_SRC_FILES := \
         JpgDecoder/mpi/Utils.cpp \
         JpgDecoder/mpi/MpiJpegEncoder.cpp \
         JpgDecoder/mpi/MpiJpegDecoder.cpp \
-        rgb888_to_gray_256_neon.s
+        rgb888_to_gray_256_neon.s \
+        einkcompositorworker.cpp
 
 ifeq ($(strip $(BOARD_DRM_HWCOMPOSER_BUFFER_IMPORTER)),nvidia-gralloc)
 LOCAL_CPPFLAGS += -DUSE_NVIDIA_IMPORTER

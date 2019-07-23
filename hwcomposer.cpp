@@ -4541,10 +4541,15 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   if(atoi(value) > 0){
       property_get("debug.mode", value, "0");
       gCurrentEpdMode = atoi(value);
+      gResetEpdMode = atoi(value);
       if(gCurrentEpdMode == EPD_A2){
           Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
           currentA2Region.orSelf(screenRegion);
-          }
+      }
+      if(gCurrentEpdMode == EPD_AUTO){
+          Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+          currentAutoRegion.orSelf(screenRegion);
+      }
   }
 
   if(gCurrentEpdMode != EPD_BLOCK){

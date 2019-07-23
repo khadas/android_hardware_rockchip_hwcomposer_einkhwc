@@ -144,6 +144,7 @@ class EinkCompositorWorker : public Worker {
   int CreateNextTimelineFence();
   int FinishComposition(int timeline);
   int Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
+  int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int PostEink(int *buffer, Rect rect, int mode);
   int SetEinkMode(const buffer_handle_t &fb_handle, Region &A2Region,Region &updateRegion,Region &AutoRegion);
   void Compose(std::unique_ptr<EinkComposition> composition);
@@ -178,7 +179,7 @@ class EinkCompositorWorker : public Worker {
   int rgaBuffer_index = 0;
   DrmRgaBuffer rgaBuffers[MaxRgaBuffers];
   int *gray16_buffer = NULL;
-  char* gray256_addr_bak = NULL;
+  char* rga_output_addr = NULL;
 
 };
 }

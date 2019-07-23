@@ -5179,7 +5179,7 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
   height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;
-  hwc_info.vrefresh = vrefresh ? vrefresh : 60;
+  hwc_info.vrefresh = vrefresh ? vrefresh : 120;
 #if 0
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   DrmConnector *connector = ctx->drm.GetConnectorFromType(display);

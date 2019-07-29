@@ -695,6 +695,7 @@ send_one_buffer:
       case EPD_FULL:
       case EPD_FULL_WIN:
       case EPD_FULL_DITHER:
+      case EPD_AUTO:
           //LOGE("jeffy FULL");
           not_fullmode_count = 0;
           break;

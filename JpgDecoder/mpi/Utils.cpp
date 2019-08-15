@@ -1,9 +1,15 @@
 //#define LOG_NDEBUG 0
-#define LOG_TAG "utils"
+#define LOG_TAG "Utils"
 #include <utils/Log.h>
 
+#include <string.h>
+#include <errno.h>
+#include <drmrga.h>
+#include <RgaApi.h>
 #include "mpp_mem.h"
 #include "Utils.h"
+
+static int rga_init = 0;
 
 void dump_mpp_frame_to_file(MppFrame frame, FILE *fp)
 {
@@ -112,127 +118,96 @@ void dump_mpp_frame_to_file(MppFrame frame, FILE *fp)
     }
 }
 
-void dump_mpp_frame_to_addr(MppFrame frame, void *addr)
+MPP_RET get_file_ptr(const char *file_name, char **buf, size_t *size)
 {
-    RK_U32 width    = 0;
-    RK_U32 height   = 0;
-    RK_U32 h_stride = 0;
-    RK_U32 v_stride = 0;
-    MppFrameFormat fmt  = MPP_FMT_YUV420SP;
-    MppBuffer buffer    = NULL;
-    RK_U8 *base = NULL;
-    RK_U8 *dst = NULL;
+    FILE *fp = NULL;
+    size_t file_size = 0;
 
-    dst = (RK_U8*)addr;
-
-    if (NULL == dst || NULL == frame)
-        return;
-
-    width    = mpp_frame_get_width(frame);
-    height   = mpp_frame_get_height(frame);
-    h_stride = mpp_frame_get_hor_stride(frame);
-    v_stride = mpp_frame_get_ver_stride(frame);
-    fmt      = mpp_frame_get_fmt(frame);
-    buffer   = mpp_frame_get_buffer(frame);
-
-    if (NULL == buffer)
-        return;
-
-    base = (RK_U8 *)mpp_buffer_get_ptr(buffer);
-
-    switch (fmt) {
-    case MPP_FMT_YUV422SP : {
-        /* YUV422SP -> YUV422P for better display */
-        RK_U32 i, j;
-        RK_U8 *base_y = base;
-        RK_U8 *base_c = base + h_stride * v_stride;
-        RK_U8 *tmp = mpp_malloc(RK_U8, h_stride * height * 2);
-        RK_U8 *tmp_u = tmp;
-        RK_U8 *tmp_v = tmp + width * height / 2;
-        RK_U32 offset = 0;
-
-        for (i = 0; i < height; i++, base_y += h_stride) {
-            memcpy(dst + offset, base_y, width);
-            offset += width;
-        }
-
-        for (i = 0; i < height; i++, base_c += h_stride) {
-            for (j = 0; j < width / 2; j++) {
-                tmp_u[j] = base_c[2 * j + 0];
-                tmp_v[j] = base_c[2 * j + 1];
-            }
-            tmp_u += width / 2;
-            tmp_v += width / 2;
-        }
-
-        memcpy(dst + offset, tmp, width * height);
-        mpp_free(tmp);
-    } break;
-    case MPP_FMT_YUV420SP : {
-        RK_U32 i;
-        RK_U8 *base_y = base;
-        RK_U8 *base_c = base + h_stride * v_stride;
-        RK_U32 offset = 0;
-
-        for (i = 0; i < height; i++, base_y += h_stride) {
-            memcpy(dst + offset, base_y, width);
-            offset += width;
-        }
-        for (i = 0; i < height / 2; i++, base_c += h_stride) {
-            memcpy(dst + offset, base_c, width);
-            offset += width;
-        }
-    } break;
-    case MPP_FMT_YUV420P : {
-        RK_U32 i;
-        RK_U8 *base_y = base;
-        RK_U8 *base_c = base + h_stride * v_stride;
-        RK_U32 offset = 0;
-
-        for (i = 0; i < height; i++, base_y += h_stride) {
-            memcpy(dst + offset, base_y, width);
-            offset += width;
-        }
-        for (i = 0; i < height / 2; i++, base_c += h_stride / 2) {
-            memcpy(dst + offset, base_c, width / 2);
-            offset += width / 2;
-        }
-        for (i = 0; i < height / 2; i++, base_c += h_stride / 2) {
-            memcpy(dst + offset, base_c, width / 2);
-            offset += width / 2;
-        }
-    } break;
-    case MPP_FMT_YUV444SP : {
-        /* YUV444SP -> YUV444P for better display */
-        RK_U32 i, j;
-        RK_U8 *base_y = base;
-        RK_U8 *base_c = base + h_stride * v_stride;
-        RK_U8 *tmp = mpp_malloc(RK_U8, h_stride * height * 2);
-        RK_U8 *tmp_u = tmp;
-        RK_U8 *tmp_v = tmp + width * height;
-        RK_U32 offset = 0;
-
-        for (i = 0; i < height; i++, base_y += h_stride) {
-            memcpy(dst + offset, base_y, width);
-            offset += width;
-        }
-
-        for (i = 0; i < height; i++, base_c += h_stride * 2) {
-            for (j = 0; j < width; j++) {
-                tmp_u[j] = base_c[2 * j + 0];
-                tmp_v[j] = base_c[2 * j + 1];
-            }
-            tmp_u += width;
-            tmp_v += width;
-        }
-
-        memcpy(dst, tmp, width * height * 2);
-        mpp_free(tmp);
-    } break;
-    default : {
-        ALOGE("not supported format %d", fmt);
-    } break;
+    fp = fopen(file_name, "rb");
+    if (NULL == fp) {
+        ALOGE("failed to open file %s - %s", file_name, strerror(errno));
+        return MPP_NOK;
     }
+
+    fseek(fp, 0L, SEEK_END);
+    file_size = ftell(fp);
+    rewind(fp);
+
+    *buf = (char*)malloc(file_size);
+    if (NULL == *buf) {
+        ALOGE("failed to malloc buffer - file %s", file_name);
+        fclose(fp);
+        return MPP_NOK;
+    }
+
+    fread(*buf, 1, file_size, fp);
+    *size = file_size;
+    fclose(fp);
+
+    return MPP_OK;
+}
+
+MPP_RET dump_ptr_to_file(char *buf, size_t size, const char *output_file)
+{
+    FILE *fp = NULL;
+
+    fp = fopen(output_file, "w+b");
+    if (NULL == fp) {
+        ALOGE("failed to open file %s - %s", output_file, strerror(errno));
+        return MPP_NOK;
+    }
+
+    fwrite(buf, 1, size, fp);
+    fflush(fp);
+    fclose(fp);
+
+    return MPP_OK;
+}
+
+MPP_RET crop_yuv_image(RK_U8 *src, RK_U8 *dst, RK_U32 src_width, RK_U32 src_height,
+                       RK_U32 src_wstride, RK_U32 src_hstride,
+                       RK_U32 dst_width, RK_U32 dst_height)
+{
+    RK_U32 ret = 0;
+    void *rga_ctx = NULL;
+    RK_U32 srcFormat, dstFormat;
+    rga_info_t rgasrc, rgadst;
+
+    if (!rga_init) {
+        RgaInit(&rga_ctx);
+        if (NULL == rga_ctx) {
+            ALOGW("failed to init rga ctx");
+            return MPP_NOK;
+        } else {
+            ALOGD("init rga ctx done");
+            rga_init = 1;
+        }
+    }
+
+    srcFormat = dstFormat = HAL_PIXEL_FORMAT_YCrCb_NV12;
+
+    memset(&rgasrc, 0, sizeof(rga_info_t));
+    rgasrc.fd = -1;
+    rgasrc.mmuFlag = 1;
+    rgasrc.virAddr = src;
+
+    memset(&rgadst, 0, sizeof(rga_info_t));
+    rgadst.fd = -1;
+    rgadst.mmuFlag = 1;
+    rgadst.virAddr = dst;
+
+    rga_set_rect(&rgasrc.rect, 0, 0, src_width, src_height,
+                 src_wstride, src_hstride, srcFormat);
+    rga_set_rect(&rgadst.rect, 0, 0, dst_width, dst_height,
+                 dst_width, dst_height, srcFormat);
+
+    ret = RgaBlit(&rgasrc, &rgadst, NULL);
+    if (ret) {
+        ALOGE("failed to rga blit ret %d", ret);
+        return MPP_NOK;
+    }
+
+    return MPP_OK;
 }
 
 MPP_RET read_yuv_image(RK_U8 *buf, FILE *fp, RK_U32 width, RK_U32 height,

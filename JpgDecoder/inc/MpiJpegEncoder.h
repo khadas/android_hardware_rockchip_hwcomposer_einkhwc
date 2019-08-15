@@ -1,6 +1,6 @@
-#ifndef MPI_JPEG_ENCODER_H_
+#ifndef __MPI_JPEG_ENCODER_H__
 
-#define MPI_JPEG_ENCODER_H_
+#define __MPI_JPEG_ENCODER_H__
 
 #include "rk_mpi.h"
 
@@ -80,4 +80,4 @@ private:
 
 };
 
-#endif  // MPI_JPEG_ENCODER_H_
+#endif  // __MPI_JPEG_ENCODER_H__

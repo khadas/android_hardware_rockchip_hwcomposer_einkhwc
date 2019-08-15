@@ -1,81 +1,81 @@
-#ifndef MPI_JPEG_DECODER_H_
-
-#define MPI_JPEG_DECODER_H_
+#ifndef __MPI_JPEG_DECODER_H__
+#define __MPI_JPEG_DECODER_H__
 
 #include "rk_mpi.h"
 
-#define MAX_FILE_NAME_LENGTH        256
+class QList;
 
 class MpiJpegDecoder {
 public:
-    MpiJpegDecoder() {}
+    MpiJpegDecoder();
+    ~MpiJpegDecoder();
 
-    enum OutputType {
-        OUTPUT_TYPE_FILE,
-        OUTPUT_TYPE_MEM_ADDR
-    };
-
-    typedef struct DecParam {
-        // input bitstream file
-        char input_file[MAX_FILE_NAME_LENGTH];
-        // the width of input picture
-        int input_width;
-        // the height of input picture
-        int input_height;
+    typedef struct {
         /*
-          the format of output picture
-          support list:
-             MPP_FMT_YUV420SP
-             MPP_FMT_YUV422SP
-             MPP_FMT_RGB565
-             MPP_FMT_ARGB8888
+         * NOTE: Since the output frame buffer send to vpu is aligned, it is
+         * neccessary to crop output with JPEG image dimens.
+         *
+         * vpu frame buffer width: FrameWidth
+         * actual image buffer width: DisplayWidth
          */
-        MppFrameFormat output_fmt;
-        // output type
-        OutputType output_type;
-        // output bitstream file
-        char output_file[MAX_FILE_NAME_LENGTH];
-        void *output_dst;
-    } DecParam;
+        uint32_t   FrameWidth;         // buffer horizontal stride
+        uint32_t   FrameHeight;        // buffer vertical stride
+        uint32_t   DisplayWidth;       // valid width for display
+        uint32_t   DisplayHeight;      // valid height for display
 
-    bool start(DecParam param);
+        uint32_t   ErrorInfo;          // error information
+        uint32_t   OutputSize;
+
+        uint8_t   *MemVirAddr;
+        uint32_t   MemPhyAddr;
+
+        void      *FrameHandler;       // MppFrame handler
+    } OutputFrame_t;
+
+    typedef enum {
+        OUT_FORMAT_ARGB      =  1,
+        OUT_FORMAT_YUV420SP  =  5,
+    } OutputFormat;
+
+    bool prepareDecoder(OutputFormat fmt);
+    void flushBuffer();
+
+    /**
+     * Output frame buffers within limits, so release frame buffer if one
+     * frame has been display successful.
+     */
+    void deinitOutputFrame(OutputFrame_t *aframeOut);
+
+    MPP_RET decode_sendpacket(char* input_buf, size_t buf_len);
+    MPP_RET decode_getoutframe(OutputFrame_t *aframeOut);
+
+    bool decodePacket(char* data, size_t size, OutputFrame_t *aframeOut);
+    bool decodeFile(const char *input_file, const char *output_file);
 
 private:
-    typedef struct {
-        MppCtx          ctx;
-        MppApi          *mpi;
+    MppCtx          mpp_ctx;
+    MppApi          *mpi;
 
-        int             width;
-        int             height;
-        int             hor_stride;
-        int             ver_stride;
-        size_t          file_size;
-        MppFrameFormat  output_fmt;
+    int             initOK;
 
-        /* end of stream flag when set quit the loop */
-        RK_U32          eos;
+    // bit per pixel
+    float           mBpp;
+    int             mOutputFmt;
 
-        /* buffer for stream data reading */
-        char            *buf;
+    QList           *mPackets;
+    QList           *mFrames;
 
-        /* input and output */
-        MppBufferGroup  frm_grp;
-        MppBufferGroup  pkt_grp;
-        MppPacket       packet;
-        size_t          packet_size;
-        MppFrame        frame;
+    /*
+     * packet buffer group
+     *      - packets in I/O, can be ion buffer or normal buffer
+     * frame buffer group
+     *      - frames in I/O, normally should be a ion buffer group
+     */
+    MppBufferGroup  mPacketGroup;
+    MppBufferGroup  mFrameGroup;
 
-        FILE            *fp_input;
-        FILE            *fp_output;
-        void            *output_dst;
-        RK_S32          frame_count;
-    } DecLoopData;
-
-    MPP_RET initDecCtx(DecLoopData **data, DecParam param);
-    MPP_RET deinitDecCtx(DecLoopData **data);
-    int decode_advanced(DecLoopData *data);
-    MPP_RET startMppProcess(DecLoopData *data);
-
+    void setup_output_frame_from_mpp_frame(OutputFrame_t *oframe, MppFrame mframe);
+    MPP_RET crop_output_frame_if_neccessary(OutputFrame_t *oframe);
 };
 
-#endif  // MPI_JPEG_DECODER_H_
+#endif  // __MPI_JPEG_DECODER_H__

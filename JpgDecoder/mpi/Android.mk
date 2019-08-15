@@ -20,17 +20,23 @@ LOCAL_CPPFLAGS := \
 
 LOCAL_SRC_FILES := \
 	Utils.cpp \
+	QList.cpp \
+	BitReader.cpp \
+	JpegParser.cpp \
 	MpiJpegEncoder.cpp \
 	MpiJpegDecoder.cpp \
 
 LOCAL_SHARED_LIBRARIES := \
 	liblog \
 	libmpp \
+	librga \
 
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../inc/mpp_inc/ \
 	$(LOCAL_PATH)/../inc \
+	$(TOP)/hardware/rockchip/librga \
 
+LOCAL_MULTILIB := 32
 LOCAL_MODULE := libhwjpeg
 
 include $(BUILD_SHARED_LIBRARY)

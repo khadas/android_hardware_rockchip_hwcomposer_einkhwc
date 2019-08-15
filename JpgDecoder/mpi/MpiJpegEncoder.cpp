@@ -9,7 +9,8 @@
 
 #define MPP_ALIGN(x, a)         (((x)+(a)-1)&~((a)-1))
 
-MPP_RET MpiJpegEncoder::initMppCtx(MpiEncCtx **data, EncParam param) {
+MPP_RET MpiJpegEncoder::initMppCtx(MpiEncCtx **data, EncParam param)
+{
     MpiEncCtx *p = NULL;
     MPP_RET ret = MPP_OK;
 
@@ -60,7 +61,8 @@ RET:
     return ret;
 }
 
-MPP_RET MpiJpegEncoder::deinitMppCtx(MpiEncCtx **data) {
+MPP_RET MpiJpegEncoder::deinitMppCtx(MpiEncCtx **data)
+{
     MpiEncCtx *p = NULL;
 
     if (!data) {
@@ -85,7 +87,8 @@ MPP_RET MpiJpegEncoder::deinitMppCtx(MpiEncCtx **data) {
     return MPP_OK;
 }
 
-MPP_RET MpiJpegEncoder::setupMppCfg(MpiEncCtx *p) {
+MPP_RET MpiJpegEncoder::setupMppCfg(MpiEncCtx *p)
+{
     MPP_RET ret;
     MppApi *mpi;
     MppCtx ctx;
@@ -187,7 +190,8 @@ RET:
     return ret;
 }
 
-MPP_RET MpiJpegEncoder::startMppProcess(MpiEncCtx *p) {
+MPP_RET MpiJpegEncoder::startMppProcess(MpiEncCtx *p)
+{
     MPP_RET ret = MPP_OK;
     MppApi *mpi;
     MppCtx ctx;
@@ -271,7 +275,8 @@ RET:
     return ret;
 }
 
-bool MpiJpegEncoder::start(EncParam param) {
+bool MpiJpegEncoder::start(EncParam param)
+{
     MPP_RET ret = MPP_OK;
     MpiEncCtx *p = NULL;
 

@@ -94,6 +94,9 @@ LOCAL_SRC_FILES := \
         hwc_util.cpp \
         hwc_rockchip.cpp \
         hwc_debug.cpp \
+	JpgDecoder/mpi/BitReader.cpp \
+	JpgDecoder/mpi/JpegParser.cpp \
+	JpgDecoder/mpi/QList.cpp \
         JpgDecoder/mpi/Utils.cpp \
         JpgDecoder/mpi/MpiJpegEncoder.cpp \
         JpgDecoder/mpi/MpiJpegDecoder.cpp \

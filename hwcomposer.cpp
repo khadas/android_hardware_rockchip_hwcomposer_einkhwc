@@ -4366,7 +4366,7 @@ int hwc_post_epd_logo(const char src_path[]){
 
   //Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
   //                  ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
-  gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
+  gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
   //EPD post
   gCurrentEpdMode = EPD_BLOCK;
   Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
@@ -5175,7 +5175,7 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
 
   uint32_t width = 0, height = 0 , vrefresh = 0 ;
 
-  width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 16);
+  width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
   height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;

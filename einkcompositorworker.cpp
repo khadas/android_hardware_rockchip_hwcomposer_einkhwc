@@ -356,15 +356,37 @@ int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_
     src.fd = -1;
     dst.fd = -1;
 
+
+    //Get virtual address
+    const gralloc_module_t *gralloc;
+    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                      (const hw_module_t **)&gralloc);
+    if (ret) {
+        ALOGE("Failed to open gralloc module");
+        return ret;
+    }
+
+#if (!RK_PER_MODE && RK_DRM_GRALLOC)
+    src_buf_w = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
+#else
+    src_buf_w = hwc_get_handle_width(gralloc,fb_handle);
+    src_buf_h = hwc_get_handle_height(gralloc,fb_handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc,fb_handle);
+    src_buf_format = hwc_get_handle_format(gralloc,fb_handle);
+#endif
+
     src_l = 0;
     src_t = 0;
-    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 16);
+    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
     src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
 
 
     dst_l = 0;
     dst_t = 0;
-    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 16);
+    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
     dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
 
 
@@ -376,7 +398,7 @@ int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_
     src.sync_mode = RGA_BLIT_SYNC;
     rga_set_rect(&src.rect,
                 src_l, src_t, src_w, src_h,
-                src_w, src_h, HAL_PIXEL_FORMAT_RGBA_8888);
+                src_buf_stride, src_buf_h, src_buf_format);
     rga_set_rect(&dst.rect, dst_l, dst_t,  dst_w, dst_h, dst_w, dst_h, HAL_PIXEL_FORMAT_YCrCb_NV12);
 
     ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
@@ -420,15 +442,36 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
     src.fd = -1;
     dst.fd = -1;
 
+    //Get virtual address
+    const gralloc_module_t *gralloc;
+    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                      (const hw_module_t **)&gralloc);
+    if (ret) {
+        ALOGE("Failed to open gralloc module");
+        return ret;
+    }
+
+#if (!RK_PER_MODE && RK_DRM_GRALLOC)
+    src_buf_w = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
+#else
+    src_buf_w = hwc_get_handle_width(gralloc,fb_handle);
+    src_buf_h = hwc_get_handle_height(gralloc,fb_handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc,fb_handle);
+    src_buf_format = hwc_get_handle_format(gralloc,fb_handle);
+#endif
+
     src_l = 0;
     src_t = 0;
-    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 16);
+    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
     src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
 
 
     dst_l = 0;
     dst_t = 0;
-    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 16);
+    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
     dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
 
 
@@ -440,7 +483,7 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
     src.sync_mode = RGA_BLIT_SYNC;
     rga_set_rect(&src.rect,
                 src_l, src_t, src_w / 8, src_h,
-                src_w, src_h, HAL_PIXEL_FORMAT_RGBA_8888);
+                src_buf_stride, src_buf_h, src_buf_format);
     rga_set_rect(&dst.rect, dst_l, dst_t,  dst_w / 8, dst_h, dst_w / 8, dst_h, HAL_PIXEL_FORMAT_RGBA_8888);
     ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
         src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,

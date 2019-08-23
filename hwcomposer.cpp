@@ -155,9 +155,9 @@ struct win_coordinate{
 #endif
 
 
-#define POWEROFF_IMAGE_PATH_USER "/data/poweroff.jpg"
-#define NOPOWER_IMAGE_PATH_USER "/data/nopower.jpg"
-#define STANDBY_IMAGE_PATH_USER "/data/standby.jpg"
+#define POWEROFF_IMAGE_PATH_USER "/data/misc/poweroff.jpg"
+#define NOPOWER_IMAGE_PATH_USER "/data/misc/nopower.jpg"
+#define STANDBY_IMAGE_PATH_USER "/data/misc/standby.jpg"
 
 #define POWEROFF_IMAGE_PATH_DEFAULT "/vendor/media/poweroff.jpg"
 #define NOPOWER_IMAGE_PATH_DEFAULT "/vendor/media/nopower.jpg"
@@ -5053,7 +5053,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gPowerMode = EPD_POWEROFF;
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
       gCurrentEpdMode = EPD_BLOCK;
-      if (!access(POWEROFF_IMAGE_PATH_USER, R_OK | W_OK)){
+      if (!access(POWEROFF_IMAGE_PATH_USER, R_OK)){
         hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
         ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
       }else{
@@ -5066,7 +5066,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gPowerMode = EPD_STANDBY;
       gCurrentEpdMode = EPD_BLOCK;
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
-      if (!access(POWEROFF_IMAGE_PATH_USER, R_OK | W_OK)){
+      if (!access(STANDBY_IMAGE_PATH_USER, R_OK)){
         hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
         ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER);
       }else{

@@ -111,7 +111,7 @@ namespace android {
 #define EPD_FULL_DITHER     (4)
 #define EPD_RESET           (5)
 #define EPD_BLACK_WHITE     (6)
-#define EPD_TEXT            (7)
+#define EPD_BG            (7)
 #define EPD_BLOCK           (8)
 #define EPD_FULL_WIN        (9)
 #define EPD_OED_PART		(10)
@@ -4436,8 +4436,8 @@ static int hwc_handle_eink_mode(int mode){
     case HWC_POWER_MODE_EPD_BLACK_WHITE:
       gCurrentEpdMode = EPD_BLACK_WHITE;
       break;
-    case HWC_POWER_MODE_EPD_TEXT:
-      gCurrentEpdMode = EPD_TEXT;
+    case HWC_POWER_MODE_EPD_BG:
+      gCurrentEpdMode = EPD_BG;
       break;
     case HWC_POWER_MODE_EPD_BLOCK:
       gCurrentEpdMode = EPD_BLOCK;

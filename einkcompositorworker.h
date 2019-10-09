@@ -75,7 +75,7 @@ namespace android {
 #define EPD_FULL_DITHER     (4)
 #define EPD_RESET           (5)
 #define EPD_BLACK_WHITE     (6)
-#define EPD_TEXT            (7)
+#define EPD_BG            (7)
 #define EPD_BLOCK           (8)
 #define EPD_FULL_WIN        (9)
 #define EPD_OED_PART		(10)

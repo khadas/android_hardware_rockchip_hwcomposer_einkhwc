@@ -152,6 +152,7 @@ struct win_coordinate{
 #define GET_EBC_BUFFER 0x7000
 #define SET_EBC_SEND_BUFFER 0x7001
 #define GET_EBC_BUFFER_INFO 0x7003
+#define SET_EBC_NOT_FULL_NUM 0x7006
 
 #endif
 
@@ -3928,8 +3929,8 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
 
 
 static int not_fullmode_count = 0;
-
-
+static int not_fullmode_num = 500;
+static int curr_not_fullmode_num = -1;
 int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Region,Region &updateRegion,Region &AutoRegion) {
   ATRACE_CALL();
 
@@ -4298,10 +4299,18 @@ send_one_buffer:
   char pro_value[PROPERTY_VALUE_MAX];
   property_get("persist.vendor.fullmode_cnt",pro_value,"500");
 
+  //not fullmode count will do by kernel, do not deal now here 
+  //if(not_fullmode_count > atoi(pro_value)){
+  //    epdMode = EPD_FULL;
+  //    not_fullmode_count = 0;
+  //}
 
-  if(not_fullmode_count > atoi(pro_value)){
-      epdMode = EPD_FULL;
-      not_fullmode_count = 0;
+  not_fullmode_num = atoi(pro_value);
+  if (not_fullmode_num != curr_not_fullmode_num) {
+    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
+        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
+    }
+    curr_not_fullmode_num = not_fullmode_num;
   }
   hwc_post_epd(gray16_buffer_bak, postRect, epdMode);
 
@@ -5196,7 +5205,7 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
   height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;
-  hwc_info.vrefresh = vrefresh ? vrefresh : 120;
+  hwc_info.vrefresh = vrefresh ? vrefresh : 20;
 #if 0
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   DrmConnector *connector = ctx->drm.GetConnectorFromType(display);

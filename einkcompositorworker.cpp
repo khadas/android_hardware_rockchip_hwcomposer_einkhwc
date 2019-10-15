@@ -571,7 +571,8 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
 
 
 static int not_fullmode_count = 0;
-
+static int not_fullmode_num = 500;
+static int curr_not_fullmode_num = -1;
 int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Region &A2Region,Region &updateRegion,Region &AutoRegion) {
   ATRACE_CALL();
 
@@ -961,10 +962,18 @@ send_one_buffer:
   property_get("persist.vendor.fullmode_cnt",pro_value,"500");
 
 
-  if(not_fullmode_count > atoi(pro_value)){
-      epdMode = EPD_FULL;
-      not_fullmode_count = 0;
+  //if(not_fullmode_count > atoi(pro_value)){
+  //    epdMode = EPD_FULL;
+  //    not_fullmode_count = 0;
+  //}
+  not_fullmode_num = atoi(pro_value);
+  if (not_fullmode_num != curr_not_fullmode_num) {
+    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
+        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
+    }
+    curr_not_fullmode_num = not_fullmode_num;
   }
+ 
   PostEink(gray16_buffer_bak, postRect, epdMode);
 
   ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> end post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());

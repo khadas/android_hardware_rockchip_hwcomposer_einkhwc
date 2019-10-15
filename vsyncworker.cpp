@@ -134,7 +134,7 @@ int VSyncWorker::SyntheticWaitVBlank(int64_t *timestamp) {
   struct timespec vsync;
   int ret = clock_gettime(CLOCK_MONOTONIC, &vsync);
 
-  float refresh = 120.0f;  // Default to 60Hz refresh rate
+  float refresh = 20.0f;  // Default to 60Hz refresh rate
   DrmConnector *conn = drm_->GetConnectorFromType(display_);
   if (conn && conn->state() == DRM_MODE_CONNECTED) {
     if (conn->active_mode().v_refresh() > 0.0f)

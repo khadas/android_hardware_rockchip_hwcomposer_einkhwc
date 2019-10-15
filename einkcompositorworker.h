@@ -115,7 +115,7 @@ struct win_coordinate{
 #define GET_EBC_BUFFER 0x7000
 #define SET_EBC_SEND_BUFFER 0x7001
 #define GET_EBC_BUFFER_INFO 0x7003
-
+#define SET_EBC_NOT_FULL_NUM 0x7006
 
 class EinkCompositorWorker : public Worker {
  public:

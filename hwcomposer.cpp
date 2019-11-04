@@ -4299,7 +4299,7 @@ send_one_buffer:
   char pro_value[PROPERTY_VALUE_MAX];
   property_get("persist.vendor.fullmode_cnt",pro_value,"500");
 
-  //not fullmode count will do by kernel, do not deal now here 
+  //not fullmode count will do by kernel, do not deal now here
   //if(not_fullmode_count > atoi(pro_value)){
   //    epdMode = EPD_FULL;
   //    not_fullmode_count = 0;
@@ -4371,11 +4371,11 @@ int hwc_post_epd_logo(const char src_path[]){
   property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
   if(strcmp(isNeedWhiteScreenWithStandby, "y") == 0){
       memset(gray16_buffer_bak, 0xff, ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
-      ALOGD_IF(log_level(DBG_DEBUG),"DEBUG_lb %s,line = %d",__FUNCTION__,__LINE__);
+      ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d",__FUNCTION__,__LINE__);
       //EPD post
-      gCurrentEpdMode = EPD_BLACK_WHITE;
+      gCurrentEpdMode = EPD_BLOCK;
       Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
-      ret = hwc_post_epd(gray16_buffer_bak,rect,gCurrentEpdMode);
+      ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_BLACK_WHITE);
   }
 
   //Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
@@ -4418,65 +4418,72 @@ static int hwc_handle_eink_mode(int mode){
       return 0;
   }
 
-  switch (mode) {
-    case HWC_POWER_MODE_EPD_NULL:
-      gCurrentEpdMode = EPD_NULL;
-      break;
-    case HWC_POWER_MODE_EPD_AUTO:
-      gCurrentEpdMode = EPD_AUTO;
-      gResetEpdMode = EPD_AUTO;
-      break;
-    case HWC_POWER_MODE_EPD_FULL:
+  if(gPowerMode == EPD_FULL){
       gCurrentEpdMode = EPD_FULL;
-      break;
-    case HWC_POWER_MODE_EPD_A2:
-      gCurrentEpdMode = EPD_A2;
-      break;
-    case HWC_POWER_MODE_EPD_PART:
-      gCurrentEpdMode = EPD_PART;
-      gResetEpdMode = EPD_PART;
-      break;
-    case HWC_POWER_MODE_EPD_FULL_DITHER:
-      gCurrentEpdMode = EPD_FULL_DITHER;
-      break;
-    case HWC_POWER_MODE_EPD_RESET:
-      gCurrentEpdMode = EPD_RESET;
-      break;
-    case HWC_POWER_MODE_EPD_BLACK_WHITE:
-      gCurrentEpdMode = EPD_BLACK_WHITE;
-      break;
-    case HWC_POWER_MODE_EPD_BG:
-      gCurrentEpdMode = EPD_BG;
-      break;
-    case HWC_POWER_MODE_EPD_BLOCK:
-      gCurrentEpdMode = EPD_BLOCK;
-      break;
-    case HWC_POWER_MODE_EPD_FULL_WIN:
-      gCurrentEpdMode = EPD_FULL_WIN;
-      break;
-    case HWC_POWER_MODE_EPD_OED_PART:
-      gCurrentEpdMode = EPD_OED_PART;
-      gResetEpdMode = EPD_OED_PART;
-      break;
-    case HWC_POWER_MODE_EPD_DIRECT_PART:
-      gCurrentEpdMode = EPD_DIRECT_PART;
-      break;
-    case HWC_POWER_MODE_EPD_DIRECT_A2:
-      gCurrentEpdMode = EPD_DIRECT_A2;
-      break;
-    case HWC_POWER_MODE_EPD_STANDBY:
-      //gCurrentEpdMode = EPD_STANDBY;
-      //hwc_post_epd_logo(STANDBY_IMAGE_PATH);
-      break;
-    case HWC_POWER_MODE_EPD_POWEROFF:
-      //gCurrentEpdMode = EPD_POWEROFF;
-      //hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
-      break;
-    case HWC_POWER_MODE_EPD_NOPOWER:
-      //gCurrentEpdMode = EPD_NOPOWER;
-      //hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
-      break;
-  };
+      gPowerMode = EPD_NULL;
+      return 0;
+  }else{
+      switch (mode) {
+        case HWC_POWER_MODE_EPD_NULL:
+          gCurrentEpdMode = EPD_NULL;
+          break;
+        case HWC_POWER_MODE_EPD_AUTO:
+          gCurrentEpdMode = EPD_AUTO;
+          gResetEpdMode = EPD_AUTO;
+          break;
+        case HWC_POWER_MODE_EPD_FULL:
+          gCurrentEpdMode = EPD_FULL;
+          break;
+        case HWC_POWER_MODE_EPD_A2:
+          gCurrentEpdMode = EPD_A2;
+          break;
+        case HWC_POWER_MODE_EPD_PART:
+          gCurrentEpdMode = EPD_PART;
+          gResetEpdMode = EPD_PART;
+          break;
+        case HWC_POWER_MODE_EPD_FULL_DITHER:
+          gCurrentEpdMode = EPD_FULL_DITHER;
+          break;
+        case HWC_POWER_MODE_EPD_RESET:
+          gCurrentEpdMode = EPD_RESET;
+          break;
+        case HWC_POWER_MODE_EPD_BLACK_WHITE:
+          gCurrentEpdMode = EPD_BLACK_WHITE;
+          break;
+        case HWC_POWER_MODE_EPD_BG:
+          gCurrentEpdMode = EPD_BG;
+          break;
+        case HWC_POWER_MODE_EPD_BLOCK:
+          gCurrentEpdMode = EPD_BLOCK;
+          break;
+        case HWC_POWER_MODE_EPD_FULL_WIN:
+          gCurrentEpdMode = EPD_FULL_WIN;
+          break;
+        case HWC_POWER_MODE_EPD_OED_PART:
+          gCurrentEpdMode = EPD_OED_PART;
+          gResetEpdMode = EPD_OED_PART;
+          break;
+        case HWC_POWER_MODE_EPD_DIRECT_PART:
+          gCurrentEpdMode = EPD_DIRECT_PART;
+          break;
+        case HWC_POWER_MODE_EPD_DIRECT_A2:
+          gCurrentEpdMode = EPD_DIRECT_A2;
+          break;
+        case HWC_POWER_MODE_EPD_STANDBY:
+          //gCurrentEpdMode = EPD_STANDBY;
+          //hwc_post_epd_logo(STANDBY_IMAGE_PATH);
+          break;
+        case HWC_POWER_MODE_EPD_POWEROFF:
+          //gCurrentEpdMode = EPD_POWEROFF;
+          //hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
+          break;
+        case HWC_POWER_MODE_EPD_NOPOWER:
+          //gCurrentEpdMode = EPD_NOPOWER;
+          //hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
+          break;
+      };
+  }
+
 
   return 0;
 }

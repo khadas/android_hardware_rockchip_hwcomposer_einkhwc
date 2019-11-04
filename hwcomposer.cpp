@@ -3692,7 +3692,7 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
         for (int h = rects[i].top;h <= rects[i].bottom && h < panel_h;h++) {
             //ALOGD("DEBUG_lb Luma8bit_to_4bit_row_2, w:%d, offset:%d, offset_dst:%d", w, offset, offset_dst);
             Luma8bit_to_4bit_row_2((short int*)(gray256_addr + offset), (char *)(gray2_buffer + (offset_dst >> 1)),
-                    line_buffer[h&1], line_buffer[!(h&1)], w, 0xff);
+                    line_buffer[h&1], line_buffer[!(h&1)], w, 0x80);
             offset += panel_w;
             offset_dst += vir_width;
         }

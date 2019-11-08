@@ -3533,7 +3533,10 @@ void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short
         g_temp = src_temp_data + res0[i] + v0;
         res0[i] = 0;
         g_temp = CLIP(g_temp);
-        g0 = g_temp & 0x80;
+        if(g_temp >= threshold)
+            g0 = 0xf0;
+        else
+            g0 = 0x00;
         e = g_temp - g0;
         v0 = (e * 7) >> 4;
         v1 = (e * 3) >> 4;
@@ -3561,7 +3564,10 @@ void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short
         g_temp = src_temp_data + res0[i+1] + v0;
         res0[i+1] = 0;
         g_temp = CLIP(g_temp);
-        g1 = g_temp & 0x80;
+        if(g_temp >= threshold)
+            g1 = 0xf0;
+        else
+            g1 = 0x00;
         e = g_temp - g1;
         v0 = (e * 7) >> 4;
         v1 = (e * 3) >> 4;
@@ -3838,7 +3844,7 @@ void rgb888_to_gray2_dither(uint8_t *dst, uint8_t *src, int panel_h, int panel_w
         for (int h = rects[i].top;h <= rects[i].bottom && h < panel_h;h++) {
             //LOGE("jeffy Luma8bit_to_4bit_row_2, w:%d, offset:%d, offset_dst:%d", w, offset, offset_dst);
             Luma8bit_to_4bit_row_2((short int*)(gray_256 + offset), (char*)(dst + (offset_dst >> 1)),
-                    line_buffer[h&1], line_buffer[!(h&1)], w, 0xff);
+                    line_buffer[h&1], line_buffer[!(h&1)], w, 0x80);
             offset += panel_w;
             offset_dst += vir_width;
         }

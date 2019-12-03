@@ -250,6 +250,13 @@ static bool g_bSkipCurFrame = false;
 hwc_context_t* g_ctx = NULL;
 //#endif
 
+static int gama[256];
+static int MAX_GAMMA_LEVEL = 80;
+static int DEFAULT_GRAY_WHITE_COUNT = 16;
+static int DEFAULT_GRAY_BLACK_COUNT = 16;
+static int last_gamma_level = 0;
+static int DEFAULT_GAMMA_LEVEL = 14;
+
 class DummySwSyncTimeline {
  public:
   int Init() {
@@ -524,6 +531,53 @@ class DrmHotplugHandler : public DrmEventHandler {
   const struct hwc_procs *procs_ = NULL;
   DisplayMap* displays_ = NULL;
 };
+
+/* add by xy
+处理gamma table灰阶映射表参数，根据像素点的rgb值转换成0-255值，然后对应gamma table对应灰阶，初始值是16个灰阶平均分配（16*16），
+0x00表示纯黑，0x0f表示纯白，总共16个灰阶值；
+*/
+static void init_gamma_table(int gamma_level){
+    if(gamma_level < 0 || gamma_level > MAX_GAMMA_LEVEL)
+        return;
+    
+    LOGD("init_gamma_table...  gamma_level= %d",gamma_level);
+    int currentGammaLevel = gamma_level;
+    last_gamma_level = currentGammaLevel;//记录最新gamma值
+
+    //纯黑点越多显示效果比较好，纯白点越多效果越不好，所以根据currentGammaLevel纯白和纯黑的变化不一样，纯黑×2，纯白/2
+
+    int mWhiteCount;//gammaTable中纯白灰阶个数
+    int mBlackCount;//gammaTable中纯黑灰阶个数
+    if(currentGammaLevel < MAX_GAMMA_LEVEL){
+        mWhiteCount = DEFAULT_GRAY_WHITE_COUNT + currentGammaLevel / 2;
+        mBlackCount = DEFAULT_GRAY_BLACK_COUNT  + currentGammaLevel * 2 ; 
+    }else{//最大对比度时，将对比度特殊化设置成黑白两色
+        mWhiteCount = 100;
+        mBlackCount = 156;
+    }
+
+    int mChangeMultiple = (256 - mBlackCount - mWhiteCount)/14;//除掉纯白纯黑其他灰阶平均分配个数
+    int whiteIndex = 256 - mWhiteCount;
+    int remainder = (256 - mBlackCount - mWhiteCount) % 14;
+    int tempremainder = remainder;
+    for (int i = 0; i < 256; i++) {
+        if(i < mBlackCount){
+            gama[i] = 0;
+        }else if(i > whiteIndex){
+            gama[i] = 15;
+        }else {
+            if(remainder > 0){ //处理平均误差,平均分配到每一个灰阶上
+                int gray = (i - mBlackCount + mChangeMultiple + 1) / (mChangeMultiple + 1);
+                gama[i] = gray;
+                if((i - mBlackCount + mChangeMultiple + 1) % (mChangeMultiple + 1) * 2 == 0)
+                    remainder--;
+            }else {
+                int gray = (i - mBlackCount - tempremainder  + mChangeMultiple) / mChangeMultiple;
+                gama[i] = gray;
+            }
+        }
+    }
+}
 
 struct hwc_context_t {
   // map of display:hwc_drm_display_t
@@ -3467,6 +3521,37 @@ int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h,
 
 int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
   ATRACE_CALL();
+  char gamma_level[PROPERTY_VALUE_MAX];
+  property_get("sys.gray.gammalevel",gamma_level,"30");
+  if(atoi(gamma_level) != last_gamma_level){
+    init_gamma_table(atoi(gamma_level));
+  }
+
+  char src_data;
+  char  g0,g3;
+  char *temp_dst = (char *)gray16_buffer;
+
+  for(int i = 0; i < h;i++){
+      for(int j = 0; j< w / 2;j++){
+          src_data = *gray256_addr;
+          g0 =  gama[(src_data)];
+		      //g0 =  (src_data&0xf0)>>4;
+          gray256_addr++;
+
+          src_data = *gray256_addr;
+          g3 =  gama[src_data] << 4;
+		      //g3 =  src_data&0xf0;
+          gray256_addr++;
+          *temp_dst = g0|g3;
+          temp_dst++;
+      }
+      //gray256_addr += (vir_w - w);
+  }
+  return 0;
+}
+
+int logo_gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
+  ATRACE_CALL();
 
   char src_data;
   char  g0,g3;
@@ -3487,7 +3572,6 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
       //gray256_addr += (vir_w - w);
   }
   return 0;
-
 }
 
 int gray256_to_gray2(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
@@ -4386,7 +4470,7 @@ int hwc_post_epd_logo(const char src_path[]){
 
   //Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
   //                  ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
-  gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
+  logo_gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
   //EPD post
   gCurrentEpdMode = EPD_BLOCK;
   Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
@@ -5076,12 +5160,25 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gPowerMode = EPD_POWEROFF;
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
       gCurrentEpdMode = EPD_BLOCK;
-      if (!access(POWEROFF_IMAGE_PATH_USER, R_OK)){
-        hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
-        ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
-      }else{
-        hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
-        ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER,POWEROFF_IMAGE_PATH_DEFAULT);
+
+      char nopower_flag[255];
+      property_get("sys.shutdown.nopower",nopower_flag, "0");
+      if(atoi(nopower_flag) == 1){
+        if (!access(NOPOWER_IMAGE_PATH_USER, R_OK)){
+          hwc_post_epd_logo(NOPOWER_IMAGE_PATH_USER);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,NOPOWER_IMAGE_PATH_USER);
+        }else{
+          hwc_post_epd_logo(NOPOWER_IMAGE_PATH_DEFAULT);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,NOPOWER_IMAGE_PATH_USER,NOPOWER_IMAGE_PATH_DEFAULT);
+        }
+      } else { 
+        if (!access(POWEROFF_IMAGE_PATH_USER, R_OK)){
+          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
+        }else{
+          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER,POWEROFF_IMAGE_PATH_DEFAULT);
+        }
       }
       break;
     /* We can't support dozing right now, so go full on */
@@ -5103,8 +5200,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gCurrentEpdMode = EPD_FULL;
       not_fullmode_count = 50;
       break;
-  };
-
+  }
 
 #if 0
   uint64_t dpmsValue = 0;

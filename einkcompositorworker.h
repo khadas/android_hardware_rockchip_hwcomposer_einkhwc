@@ -84,6 +84,8 @@ namespace android {
 #define EPD_STANDBY			(13)
 #define EPD_POWEROFF        (14)
 #define EPD_NOPOWER        (15)
+#define EPD_AUTO_BG        (16)
+#define EPD_UNBLOCK        (17)
 
 /*android use struct*/
 struct ebc_buf_info{

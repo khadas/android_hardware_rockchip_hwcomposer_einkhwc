@@ -669,9 +669,10 @@ send_one_buffer:
     return 0;
 	}
 
-  if(epdMode == EPD_FULL || epdMode == EPD_BLOCK)
+  if((epdMode == EPD_FULL) || (epdMode == EPD_BLOCK) || (epdMode == EPD_UNBLOCK))
   {
       A2Region.clear();
+      gLastA2Region.clear();
   }
   else if(epdMode == EPD_A2)
   {

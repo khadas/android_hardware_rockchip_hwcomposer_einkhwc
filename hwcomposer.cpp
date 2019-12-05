@@ -121,6 +121,7 @@ namespace android {
 #define EPD_POWEROFF        (14)
 #define EPD_NOPOWER        (15)
 #define EPD_AUTO_BG        (16)
+#define EPD_UNBLOCK        (17)
 
 /*android use struct*/
 struct ebc_buf_info{
@@ -4508,8 +4509,8 @@ static int hwc_handle_eink_mode(int mode){
       return 0;
   }
 
-  if(gPowerMode == EPD_FULL){
-      gCurrentEpdMode = EPD_FULL;
+  if(gPowerMode == EPD_UNBLOCK){
+      gCurrentEpdMode = EPD_UNBLOCK;
       gPowerMode = EPD_NULL;
       return 0;
   }else{
@@ -5196,7 +5197,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       break;
     case HWC_POWER_MODE_DOZE_SUSPEND:
     case HWC_POWER_MODE_NORMAL:
-      gPowerMode = EPD_FULL;
+      gPowerMode = EPD_UNBLOCK;
       gCurrentEpdMode = EPD_FULL;
       not_fullmode_count = 50;
       break;

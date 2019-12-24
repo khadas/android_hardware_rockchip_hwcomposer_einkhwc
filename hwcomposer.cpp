@@ -5163,7 +5163,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gCurrentEpdMode = EPD_BLOCK;
 
       char nopower_flag[255];
-      property_get("sys.shutdown.nopower",nopower_flag, "0");
+      property_get("sys.poweroff.nopower",nopower_flag, "0");
       if(atoi(nopower_flag) == 1){
         if (!access(NOPOWER_IMAGE_PATH_USER, R_OK)){
           hwc_post_epd_logo(NOPOWER_IMAGE_PATH_USER);

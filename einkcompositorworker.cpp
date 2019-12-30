@@ -673,6 +673,7 @@ send_one_buffer:
   {
       A2Region.clear();
       gLastA2Region.clear();
+      gSavedUpdateRegion.clear();
   }
   else if(epdMode == EPD_A2)
   {
@@ -763,21 +764,21 @@ send_one_buffer:
                   Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
                                 ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
               if (A2Region.isEmpty()) {
-                 // ALOGE("jeffy quit A2");
+                  //ALOGE("quit A2");
                   //get out a2 mode.
                   //1.reset updated region to white.
                   updateRegion.orSelf(gLastA2Region);
                   updateRegion.orSelf(gSavedUpdateRegion);
                   gLastA2Region.clear();
                   gSavedUpdateRegion.clear();
-                  apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.vir_width, updateRegion,&ebc_buf_info);
+                  //apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.vir_width, updateRegion,&ebc_buf_info);
 
-                  //2.paint updated region.
-                  epdMode = EPD_A2;//EPD_BLACK_WHITE;//
-                  PostEink(gray16_buffer, postRect, epdMode);
+                  //2//.paint updated region.
+                  //epdMode = EPD_A2;//EPD_BLACK_WHITE;//
+                  //PostEink(gray16_buffer, postRect, epdMode);
 
                   //3.will repaint those regions in full mode.
-                  gCurrentEpdMode = EPD_FULL_WIN;
+                  gCurrentEpdMode = EPD_FULL;
                   Rect rect = updateRegion.getBounds();
                   postRect = rect;
                   goto    send_one_buffer;
@@ -808,12 +809,12 @@ send_one_buffer:
                       newUpdateRegion.dump("fremebuffer2 newUpdateRegion");
                   }
                   //1.reset new region to white, and paint them.
-                  apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
-                          ebc_buf_info.vir_width, newUpdateRegion | newA2Region,&ebc_buf_info);
+                  //apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
+                  //        ebc_buf_info.vir_width, newUpdateRegion | newA2Region,&ebc_buf_info);
                   epdMode = EPD_BLACK_WHITE;
-                  PostEink(gray16_buffer, postRect, epdMode);
+                  //PostEink(gray16_buffer, postRect, epdMode);
                   //2.will repaint those regions in a2 mode.
-                  goto    send_one_buffer;
+                  //goto    send_one_buffer;
               }
               //not_fullmode_count++;
               break;

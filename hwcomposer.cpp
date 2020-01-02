@@ -161,10 +161,14 @@ struct win_coordinate{
 #define POWEROFF_IMAGE_PATH_USER "/data/misc/poweroff.jpg"
 #define NOPOWER_IMAGE_PATH_USER "/data/misc/nopower.jpg"
 #define STANDBY_IMAGE_PATH_USER "/data/misc/standby.jpg"
+#define STANDBY_NOPOWER_PATH_USER "/data/misc/standby_nopower.jpg"
+#define STANDBY_CHARGE_PATH_USER "/data/misc/standby_charge.jpg"
 
 #define POWEROFF_IMAGE_PATH_DEFAULT "/vendor/media/poweroff.jpg"
 #define NOPOWER_IMAGE_PATH_DEFAULT "/vendor/media/nopower.jpg"
 #define STANDBY_IMAGE_PATH_DEFAULT "/vendor/media/standby.jpg"
+#define STANDBY_NOPOWER_PATH_DEFAULT "/vendor/media/standby_nopower.jpg"
+#define STANDBY_CHARGE_PATH_DEFAULT "/vendor/media/standby_charge.jpg"
 
 int gPixel_format = 24;
 
@@ -5187,12 +5191,35 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gPowerMode = EPD_STANDBY;
       gCurrentEpdMode = EPD_BLOCK;
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
-      if (!access(STANDBY_IMAGE_PATH_USER, R_OK)){
-        hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
-        ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER);
-      }else{
-        hwc_post_epd_logo(STANDBY_IMAGE_PATH_DEFAULT);
-        ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER,STANDBY_IMAGE_PATH_DEFAULT);
+
+      char standby_nopower_flag[255];
+      char standby_charge_flag[255];
+      property_get("sys.standby.nopower",standby_nopower_flag, "0");
+      property_get("sys.standby.charge",standby_charge_flag, "0");
+      if (atoi(standby_nopower_flag) == 1){
+        if (!access(STANDBY_NOPOWER_PATH_USER, R_OK)){
+          hwc_post_epd_logo(STANDBY_NOPOWER_PATH_USER);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_NOPOWER_PATH_USER);
+        }else{
+          hwc_post_epd_logo(STANDBY_NOPOWER_PATH_DEFAULT);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_NOPOWER_PATH_USER,STANDBY_NOPOWER_PATH_DEFAULT);
+        }
+      } else if (atoi(standby_charge_flag) == 1){
+        if (!access(STANDBY_CHARGE_PATH_USER, R_OK)){
+          hwc_post_epd_logo(STANDBY_CHARGE_PATH_USER);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER);
+        }else{
+          hwc_post_epd_logo(STANDBY_CHARGE_PATH_DEFAULT);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER,STANDBY_CHARGE_PATH_DEFAULT);
+        }
+      } else {
+        if (!access(STANDBY_IMAGE_PATH_USER, R_OK)){
+          hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER);
+        }else{
+          hwc_post_epd_logo(STANDBY_IMAGE_PATH_DEFAULT);
+          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER,STANDBY_IMAGE_PATH_DEFAULT);
+        }
       }
       break;
     case HWC_POWER_MODE_DOZE_SUSPEND:

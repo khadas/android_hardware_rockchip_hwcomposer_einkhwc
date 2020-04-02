@@ -122,6 +122,12 @@ namespace android {
 #define EPD_NOPOWER        (15)
 #define EPD_AUTO_BG        (16)
 #define EPD_UNBLOCK        (17)
+#define EPD_PART_GL16     (18)
+#define EPD_PART_GLR16   (19)
+#define EPD_PART_GLD16   (20)
+#define EPD_FULL_GL16      (21)
+#define EPD_FULL_GLR16    (22)
+#define EPD_FULL_GLD16    (23)
 
 /*android use struct*/
 struct ebc_buf_info{
@@ -4175,6 +4181,10 @@ send_one_buffer:
       case EPD_FULL:
       case EPD_FULL_WIN:
       case EPD_FULL_DITHER:
+      case EPD_AUTO:
+      case EPD_FULL_GL16:
+      case EPD_FULL_GLR16:
+      case EPD_FULL_GLD16:
           //LOGE("jeffy FULL");
           not_fullmode_count = 0;
           break;
@@ -4298,6 +4308,10 @@ send_one_buffer:
         case EPD_FULL:
         case EPD_FULL_WIN:
         case EPD_FULL_DITHER:
+        case EPD_AUTO:
+        case EPD_FULL_GL16:
+        case EPD_FULL_GLR16:
+        case EPD_FULL_GLD16:
             //LOGE("jeffy FULL");
             not_fullmode_count = 0;
             break;
@@ -4575,6 +4589,27 @@ static int hwc_handle_eink_mode(int mode){
         case HWC_POWER_MODE_EPD_NOPOWER:
           //gCurrentEpdMode = EPD_NOPOWER;
           //hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
+          break;
+        case HWC_POWER_MODE_EPD_AUTO_BG:
+          gCurrentEpdMode = EPD_AUTO_BG;
+          break;
+        case HWC_POWER_MODE_EPD_PART_GL16:
+          gCurrentEpdMode = EPD_PART_GL16;
+          break;
+	 case HWC_POWER_MODE_EPD_PART_GLR16:
+          gCurrentEpdMode = EPD_PART_GLR16;
+          break;
+        case HWC_POWER_MODE_EPD_PART_GLD16:
+          gCurrentEpdMode = EPD_PART_GLD16;
+          break;
+	 case HWC_POWER_MODE_EPD_FULL_GL16:
+          gCurrentEpdMode = EPD_FULL_GL16;
+          break;
+        case HWC_POWER_MODE_EPD_FULL_GLR16:
+          gCurrentEpdMode = EPD_FULL_GLR16;
+          break;
+	 case HWC_POWER_MODE_EPD_FULL_GLD16:
+          gCurrentEpdMode = EPD_FULL_GLD16;
           break;
       };
   }

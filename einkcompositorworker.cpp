@@ -742,6 +742,9 @@ send_one_buffer:
       case EPD_FULL_WIN:
       case EPD_FULL_DITHER:
       case EPD_AUTO:
+      case EPD_FULL_GL16:
+      case EPD_FULL_GLR16:
+      case EPD_FULL_GLD16:
           //LOGE("jeffy FULL");
           not_fullmode_count = 0;
           break;
@@ -867,6 +870,10 @@ send_one_buffer:
         case EPD_FULL:
         case EPD_FULL_WIN:
         case EPD_FULL_DITHER:
+        case EPD_AUTO:
+        case EPD_FULL_GL16:
+        case EPD_FULL_GLR16:
+        case EPD_FULL_GLD16:
             //LOGE("jeffy FULL");
             not_fullmode_count = 0;
             break;

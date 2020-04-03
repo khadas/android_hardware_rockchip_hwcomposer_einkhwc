@@ -118,7 +118,7 @@ struct win_coordinate{
 };
 
 
-#define USE_RGA 0
+#define USE_RGA 1
 
 #define GET_EBC_BUFFER 0x7000
 #define SET_EBC_SEND_BUFFER 0x7001

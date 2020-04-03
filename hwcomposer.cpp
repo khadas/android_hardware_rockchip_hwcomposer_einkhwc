@@ -3806,32 +3806,183 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
 
 void Rgb888_to_color_eink(char *dst,int *src,int  fb_height, int fb_width,int vir_width)
 {
-    int count;
     int src_data;
-    int  g0, g1, g2, g3,g4,g5,g6,g7;
+    int  r1, g1, b1;
+    int  r2, g2, b2;
+    int  r3, g3, b3;
+    int  r4, g4, b4;
+    int  r5, g5, b5;
+    int  r6, g6, b6;
     int i,j;
     int *temp_src;
     char *temp_dst;
-#if 1
-    for(i = 0; i < fb_height;i++){//RGB888->RGB444
-		temp_dst = dst;
+    char *temp_dst1;
+    int dst_dep;
 
-        for(j = 0; j<fb_width/2;j++){
-            src_data = *src++;
-            g0 =  (src_data&0xf0)>>4;
-            g1 = (src_data&0xf000)>>8;
-            g2 = (src_data&0xf00000)>>20;
-            src_data = *src++;
-            g3 =  src_data&0xf0;
+    int new_value = 0;
+    char value[PROPERTY_VALUE_MAX];
+    property_get("debug.eink.rgb", value, "0");
+    new_value = atoi(value);
+    ALOGD("lyx: fb_height = %d, fb_width = %d, vir_width = %d\n", fb_height, fb_width, vir_width);
+
+    dst_dep = fb_width % 6;
+    ALOGD("lyx: dst_dep = %d\n", dst_dep);
+    for (i = 0; i < fb_height; i++) {
+        temp_src = src + (i * fb_width);
+        temp_dst = dst + (i * 3 * vir_width / 2);
+        for (j = 0; j < (fb_width / 6); j++) {
+            src_data = *temp_src++;
+            r1 =  (src_data&0xf0)>>4;
+            g1 = (src_data&0xf000)>>12;
+            b1 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r2 =  (src_data&0xf0)>>4;
+            g2 = (src_data&0xf000)>>12;
+            b2 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r3 =  (src_data&0xf0)>>4;
+            g3 = (src_data&0xf000)>>12;
+            b3 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r4 =  (src_data&0xf0)>>4;
             g4 = (src_data&0xf000)>>12;
-            g5 = (src_data&0xf00000)>>16;
-            *dst++ = g0|g1;
-            *dst++ = g2|g3;
-            *dst++ = g4|g5;
+            b4 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r5 =  (src_data&0xf0)>>4;
+            g5 = (src_data&0xf000)>>12;
+            b5 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r6 =  (src_data&0xf0)>>4;
+            g6 = (src_data&0xf000)>>12;
+            b6 = (src_data&0xf00000)>>20;
+
+            if (new_value == 1) {//red
+                r1 = r2 = r3 = r4 = r5 = r6 =  0xf;
+                g1 = g2 = g3 = g4 = g5 = g6 = 0;
+                b1 = b2 = b3 = b4 = b5 = b6 = 0;
+            }
+            else if (new_value == 2) {//green
+                r1 = r2 = r3 = r4 = r5 = r6 =  0;
+                g1 = g2 = g3 = g4 = g5 = g6 = 0xf;
+                b1 = b2 = b3 = b4 = b5 = b6 = 0;
+            }
+            else if (new_value == 3) {//blue
+                r1 = r2 = r3 = r4 = r5 = r6 =  0;
+                g1 = g2 = g3 = g4 = g5 = g6 = 0;
+                b1 = b2 = b3 = b4 = b5 = b6 = 0xf;
+            }
+
+            temp_dst1 = temp_dst + (j * 9);
+            *temp_dst1++ = g1 | (g1<<4);
+            *temp_dst1++ = g1 | (b2<<4);
+            *temp_dst1++ = b2 | (b2<<4);
+
+            *temp_dst1++ = r3 | (r3<<4);
+            *temp_dst1++ = r3 | (g4<<4);
+            *temp_dst1++ = g4 | (g4<<4);
+
+            *temp_dst1++ = b5 | (b5<<4);
+            *temp_dst1++ = b5 | (r6<<4);
+            *temp_dst1++ = r6 | (r6<<4);
+
+            temp_dst1 = temp_dst + (vir_width/2) + (j * 9);
+            *temp_dst1++ = b1 | (b1<<4);
+            *temp_dst1++ = b1 | (r2<<4);
+            *temp_dst1++ = r2 | (r2<<4);
+
+            *temp_dst1++ = g3 | (g3<<4);
+            *temp_dst1++ = g3 | (b4<<4);
+            *temp_dst1++ = b4 | (b4<<4);
+
+            *temp_dst1++ = r5 | (r5<<4);
+            *temp_dst1++ = r5 | (g6<<4);
+            *temp_dst1++ = g6 | (g6<<4);
+
+            temp_dst1 = temp_dst + vir_width + (j * 9);
+            *temp_dst1++ = r1 | (r1<<4);
+            *temp_dst1++ = r1 | (g2<<4);
+            *temp_dst1++ = g2 | (g2<<4);
+
+            *temp_dst1++ = b3 | (b3<<4);
+            *temp_dst1++ = b3 | (r4<<4);
+            *temp_dst1++ = r4 | (r4<<4);
+
+            *temp_dst1++ = g5 | (g5<<4);
+            *temp_dst1++ = g5 | (b6<<4);
+            *temp_dst1++ = b6 | (b6<<4);
         }
-	  dst = temp_dst + vir_width/2;
+
+        if (dst_dep == 4) {
+            src_data = *temp_src++;
+            r1 =  (src_data&0xf0)>>4;
+            g1 = (src_data&0xf000)>>12;
+            b1 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r2 =  (src_data&0xf0)>>4;
+            g2 = (src_data&0xf000)>>12;
+            b2 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r3 =  (src_data&0xf0)>>4;
+            g3 = (src_data&0xf000)>>12;
+            b3 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r4 =  (src_data&0xf0)>>4;
+            g4 = (src_data&0xf000)>>12;
+            b4 = (src_data&0xf00000)>>20;
+
+            temp_dst1 = temp_dst + (j * 9);
+            *temp_dst1++ = g1 | (g1<<4);
+            *temp_dst1++ = g1 | (b2<<4);
+            *temp_dst1++ = b2 | (b2<<4);
+
+            *temp_dst1++ = r3 | (r3<<4);
+            *temp_dst1++ = r3 | (g4<<4);
+            *temp_dst1++ = g4 | (g4<<4);
+
+            temp_dst1 = temp_dst + (vir_width/2) + (j * 9);
+            *temp_dst1++ = b1 | (b1<<4);
+            *temp_dst1++ = b1 | (r2<<4);
+            *temp_dst1++ = r2 | (r2<<4);
+
+            *temp_dst1++ = g3 | (g3<<4);
+            *temp_dst1++ = g3 | (b4<<4);
+            *temp_dst1++ = b4 | (b4<<4);
+
+            temp_dst1 = temp_dst + vir_width + (j * 9);
+            *temp_dst1++ = r1 | (r1<<4);
+            *temp_dst1++ = r1 | (g2<<4);
+            *temp_dst1++ = g2 | (g2<<4);
+
+            *temp_dst1++ = b3 | (b3<<4);
+            *temp_dst1++ = b3 | (r4<<4);
+            *temp_dst1++ = r4 | (r4<<4);
+        }
+        else if (dst_dep == 2) {
+            src_data = *temp_src++;
+            r1 =  (src_data&0xf0)>>4;
+            g1 = (src_data&0xf000)>>12;
+            b1 = (src_data&0xf00000)>>20;
+            src_data = *temp_src++;
+            r2 =  (src_data&0xf0)>>4;
+            g2 = (src_data&0xf000)>>12;
+            b2 = (src_data&0xf00000)>>20;
+
+            temp_dst1 = temp_dst + (j * 9);
+            *temp_dst1++ = g1 | (g1<<4);
+            *temp_dst1++ = g1 | (b2<<4);
+            *temp_dst1++ = b2 | (b2<<4);
+
+            temp_dst1 = temp_dst + (vir_width/2) + (j * 9);
+            *temp_dst1++ = b1 | (b1<<4);
+            *temp_dst1++ = b1 | (r2<<4);
+            *temp_dst1++ = r2 | (r2<<4);
+
+            temp_dst1 = temp_dst + vir_width + (j * 9);
+            *temp_dst1++ = r1 | (r1<<4);
+            *temp_dst1++ = r1 | (g2<<4);
+            *temp_dst1++ = g2 | (g2<<4);
+        }
     }
-	#endif
 }
 
 void neon_rgb888_to_gray256ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w)
@@ -4444,73 +4595,132 @@ void hwc_free_buffer(hwc_drm_display_t *hd) {
     }
 }
 #endif
-static void inputJpgLogo(const char src_path[],const void *dst, int w, int h)
+
+static void inputJpgLogo(const char src_path[],void *dst, int w, int h, int color)
 {
-/* --------------- jpeg_dec demo ----------------*/
-    MpiJpegDecoder::DecParam param;
-    strcpy(param.input_file, src_path);
-    param.input_width = w;
-    param.input_height = h;
-    /*
-      output format support list:
-         MPP_FMT_YUV420SP
-         MPP_FMT_YUV422SP
-         MPP_FMT_RGB565
-         MPP_FMT_ARGB8888
-    */
-    param.output_fmt = MPP_FMT_YUV420SP;
+        int bpp = 1.5;
+        uint8_t*dest_data = (uint8_t *)dst;
+        char *buf = NULL;
+        bool ret = false;
+        FILE *fp = NULL;
+        size_t file_size = 0;
+        uint32_t h_stride, v_stride, width, height;
+        uint8_t *base = NULL;
+        MpiJpegDecoder decoder;
+        MpiJpegDecoder::OutputFrame_t frameOut;
 
-    param.output_type = MpiJpegDecoder::OUTPUT_TYPE_MEM_ADDR;
-    param.output_dst = (void *)dst;
+        fp = fopen(src_path, "rb");
+        if (NULL == fp) {
+                ALOGE("failed to open file %s - %s", src_path, strerror(errno));
+                return;
+        }
+        ALOGD("open file %s", src_path);
 
-    MpiJpegDecoder decoder;
-    if (!decoder.start(param))
-        ALOGE("decode failed");
-    /* --------------------------------------------*/
+        fseek(fp, 0L, SEEK_END);
+        file_size = ftell(fp);
+        rewind(fp);
 
+        buf = (char*)malloc(file_size);
+        if (NULL == *buf) {
+                ALOGE("failed to malloc buffer - file %s", src_path);
+                fclose(fp);
+                return;
+        }
+
+        fread(buf, 1, file_size, fp);
+        fclose(fp);
+
+        if (color)
+            ret = decoder.prepareDecoder(MpiJpegDecoder::OUT_FORMAT_ARGB);
+        else
+            ret = decoder.prepareDecoder(MpiJpegDecoder::OUT_FORMAT_YUV420SP);
+        if (!ret) {
+                ALOGE("failed to prepare JPEG decoder");
+                goto DECODE_OUT;
+        }
+
+        memset(&frameOut, 0, sizeof(frameOut));
+        ret = decoder.decodePacket(buf, file_size, &frameOut);
+        if (!ret) {
+                ALOGE("failed to decode packet");
+                goto DECODE_OUT;
+        }
+
+        ALOGE("decode packet size = %d, width=%d, h_stride=%d, height=%d\n", frameOut.OutputSize, frameOut.DisplayWidth, frameOut.FrameWidth,
+                frameOut.DisplayHeight);
+        /* TODO - get diaplay for the frameOut.
+        * - frame address: frameOut.MemVirAddr
+        * - frame size: frameOut.OutputSize */
+        h_stride = frameOut.FrameWidth;
+        v_stride = frameOut.FrameHeight;
+        width = frameOut.DisplayWidth;
+        height = frameOut.DisplayHeight;
+        base = frameOut.MemVirAddr;
+        if (color)
+            bpp = 4;
+        else
+            bpp = 1.5;
+        for (int i = 0; i< height; i++, base += h_stride*bpp) {
+                memcpy(dest_data, base, width*bpp);
+                dest_data += width*bpp;
+        }
+
+        /* Output frame buffers within limits, so release frame buffer if one
+        frame has been display successful. */
+        decoder.deinitOutputFrame(&frameOut);
+
+DECODE_OUT:
+        decoder.flushBuffer();
+        if (buf)
+                free(buf);
+        return ;
 }
 
-int hwc_post_epd_logo(const char src_path[]){
-  int ret = 0;
-  //NV12 format size = w * h * 1.5
-  void *gray256_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
-  inputJpgLogo(src_path,(void *)gray256_addr,ebc_buf_info.width,ebc_buf_info.height);
+int hwc_post_epd_logo(const char src_path[]) {
+    int *gray16_buffer;
+    void *image_addr;
 
-  int *gray16_buffer;
-  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
-  int *gray16_buffer_bak = gray16_buffer;
+    if (ebc_buf_info.color_panel == 1) {
+        ALOGD("lyx: ebc_buf_info.color_panel == 1\n");
+        image_addr = (char *)malloc((ebc_buf_info.width/3) * (ebc_buf_info.height/3) * 4);
+        inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3, 1);
+    }
+    else {
+        image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
+        inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height, 0);
+    }
 
-	char isNeedWhiteScreenWithStandby[PROPERTY_VALUE_MAX] = "n";
+    gray16_buffer = (int *)malloc(ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
+    int *gray16_buffer_bak = gray16_buffer;
+    char isNeedWhiteScreenWithStandby[PROPERTY_VALUE_MAX] = "n";
+    /* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
+    property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
+    if (strcmp(isNeedWhiteScreenWithStandby, "y") == 0) {
+        memset(gray16_buffer_bak, 0xff, ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
+        ALOGD_IF(log_level(DBG_DEBUG), "%s,line = %d", __FUNCTION__, __LINE__);
+        //EPD post
+        Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+        hwc_post_epd(gray16_buffer_bak, rect, EPD_BLACK_WHITE);
+    }
 
-	/* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
-  property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
-  if(strcmp(isNeedWhiteScreenWithStandby, "y") == 0){
-      memset(gray16_buffer_bak, 0xff, ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
-      ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d",__FUNCTION__,__LINE__);
-      //EPD post
-      gCurrentEpdMode = EPD_BLOCK;
-      Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
-      ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_BLACK_WHITE);
-  }
+    if (ebc_buf_info.color_panel == 1)
+        Rgb888_to_color_eink((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/3, ebc_buf_info.width/3, ebc_buf_info.vir_width);
+    else
+        logo_gray256_to_gray16((char *)image_addr, gray16_buffer, ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);	
 
-  //Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
-  //                  ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
-  logo_gray256_to_gray16((char *)gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
-  //EPD post
-  gCurrentEpdMode = EPD_BLOCK;
-  Rect rect(0,0,ebc_buf_info.width,ebc_buf_info.height);
-  ret = hwc_post_epd(gray16_buffer_bak,rect,EPD_BLOCK);
-  if(ret)
-    ALOGE("hwc_post_epd fail\n");
-  gCurrentEpdMode = EPD_BLOCK;
-  free(gray256_addr);
-  gray256_addr = NULL;
-
-  free(gray16_buffer_bak);
-  gray16_buffer_bak = NULL;
-  gray16_buffer = NULL;
-  return 0;
-
+    //EPD post
+    gCurrentEpdMode = EPD_BLOCK;
+    Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+    hwc_post_epd(gray16_buffer, rect, EPD_BLOCK);
+    gCurrentEpdMode = EPD_BLOCK;
+  
+    free(image_addr);
+    image_addr = NULL;
+    free(gray16_buffer);
+    gray16_buffer = NULL;
+    gray16_buffer_bak = NULL;
+  
+    return 0;
 }
 
 static int unflattenRegion(const struct region_buffer_t &buffer, Region &region) {
@@ -4700,12 +4910,24 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
       gCurrentEpdMode = atoi(value);
       //gResetEpdMode = atoi(value);
       if(gCurrentEpdMode == EPD_A2){
-          Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-          currentA2Region.orSelf(screenRegion);
+	   if (ebc_buf_info.color_panel == 1) {
+            Region screenRegion(Rect(0, 0, ebc_buf_info.width/3, ebc_buf_info.height/3));
+            currentAutoRegion.orSelf(screenRegion);
+	   }
+	   else {
+            Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+            currentA2Region.orSelf(screenRegion);
+	   }
       }
       if(gCurrentEpdMode == EPD_AUTO){
-          Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-          currentAutoRegion.orSelf(screenRegion);
+	   if (ebc_buf_info.color_panel == 1) {
+            Region screenRegion(Rect(0, 0, ebc_buf_info.width/3, ebc_buf_info.height/3));
+            currentAutoRegion.orSelf(screenRegion);
+	   }
+	   else {
+            Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+            currentAutoRegion.orSelf(screenRegion);
+	   }
       }
   }
 
@@ -5378,9 +5600,15 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
     return 0;
 
   uint32_t width = 0, height = 0 , vrefresh = 0 ;
-
-  width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-  height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  if (ebc_buf_info.color_panel == 0) {
+    width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  }
+  else if (ebc_buf_info.color_panel == 1) {
+    LOGD("lyx: ebc_buf_info.color_panel == 1\n");
+    width = ebc_buf_info.fb_width/3 - ((ebc_buf_info.fb_width/3) % 8);
+    height = ebc_buf_info.fb_height/3 - ((ebc_buf_info.fb_height/3) % 2);
+  }
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;
   hwc_info.vrefresh = vrefresh ? vrefresh : 20;

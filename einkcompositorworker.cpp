@@ -576,6 +576,8 @@ static int curr_not_fullmode_num = -1;
 int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Region &A2Region,Region &updateRegion,Region &AutoRegion) {
   ATRACE_CALL();
 
+  int gPixel_format = 24;
+
   int ret = 0;
   Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
 
@@ -640,6 +642,30 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
     }
     gray256_addr = rga_output_addr;
   }
+#else
+
+    char* framebuffer_base = NULL;
+    int width,height,stride,byte_stride,format,size;
+    buffer_handle_t src_hnd = fb_handle;
+
+    //Get virtual address
+    const gralloc_module_t *gralloc;
+    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                      (const hw_module_t **)&gralloc);
+    if (ret) {
+        ALOGE("Failed to open gralloc module");
+        return ret;
+    }
+
+    width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
+    height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
+    stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
+    byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
+    format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
+    size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
+
+    gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                    0, 0, width, height, (void **)&framebuffer_base);
 
 #endif
 send_one_buffer:
@@ -982,7 +1008,7 @@ send_one_buffer:
     }
     curr_not_fullmode_num = not_fullmode_num;
   }
- 
+
   PostEink(gray16_buffer_bak, postRect, epdMode);
 
   ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> end post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());

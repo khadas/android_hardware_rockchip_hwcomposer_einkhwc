@@ -578,6 +578,7 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
 
   int gPixel_format = 24;
 
+
   int ret = 0;
   Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
 
@@ -642,11 +643,12 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
     }
     gray256_addr = rga_output_addr;
   }
+
 #else
+
 
     char* framebuffer_base = NULL;
     int width,height,stride,byte_stride,format,size;
-    buffer_handle_t src_hnd = fb_handle;
 
     //Get virtual address
     const gralloc_module_t *gralloc;
@@ -657,17 +659,24 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
         return ret;
     }
 
-    width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
-    height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
-    stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
-    byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
-    format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
-    size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
+    width = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
+    height = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
+    stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
+    byte_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_BYTE_STRIDE);
+    format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
+    size = hwc_get_handle_attibute(gralloc,fb_handle,ATT_SIZE);
 
-    gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+    ret = gralloc->lock(gralloc, fb_handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                     0, 0, width, height, (void **)&framebuffer_base);
 
+
+    gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
+
+//    ALOGD("rk-debug %s,line = %d, w = %d , h = %d , lock ret = %d",__FUNCTION__,__LINE__,ebc_buf_info.width,ebc_buf_info.height,ret);
+//    ALOGD("rk-debug %s,line = %d, framebuffer w = %d , h = %d , format =  %d",__FUNCTION__,__LINE__,width,height,format);
+//    ALOGD("rk-debug %s,line = %d, framebuffer base = %p ",__FUNCTION__,__LINE__,framebuffer_base);
 #endif
+
 send_one_buffer:
 
   ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> begin post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());
@@ -875,6 +884,9 @@ send_one_buffer:
   }
 
 #else
+
+  //ALOGD("rk-debug %s,line = %d , ebc_buf_info.color_panel = %d",__FUNCTION__,__LINE__,ebc_buf_info.color_panel);
+
   //convent all to gray 16.
   if (epdMode != EPD_A2)
   {
@@ -885,30 +897,31 @@ send_one_buffer:
       int*temp_gray;
       temp_rgb = (int*)(framebuffer_base);
       temp_gray = (int*)gray16_buffer;
-          Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
+          Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.vir_width);
       }
       else if(gPixel_format==8) {
           if (epdMode == EPD_FULL_DITHER)
           {
-              Luma8bit_to_4bit_dither((int*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.vir_height,ebc_buf_info.vir_width,ebc_buf_info.width);
+              Luma8bit_to_4bit_dither((int*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.vir_height,ebc_buf_info.vir_width,width);
           }
           else
           {
-              Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(framebuffer_base),ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
+              Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(framebuffer_base),ebc_buf_info.vir_height,ebc_buf_info.vir_width,width);
           }
       }
       else
       {
           if (epdMode == EPD_FULL_DITHER)
           {
-              rgb888_to_gray16_dither((int*)gray16_buffer,(uint8_t*)(framebuffer_base), ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+              rgb888_to_gray16_dither((int*)gray16_buffer,(uint8_t*)(framebuffer_base), height, width, ebc_buf_info.vir_width);
           }
           else
           {
-              neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(framebuffer_base), ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+              neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(framebuffer_base), height, width, ebc_buf_info.vir_width);
       }
       }
   }
+
   switch(epdMode){
         case EPD_FULL:
         case EPD_FULL_WIN:
@@ -1010,6 +1023,7 @@ send_one_buffer:
     }
 #endif
 
+
   char pro_value[PROPERTY_VALUE_MAX];
   property_get("persist.vendor.fullmode_cnt",pro_value,"500");
 
@@ -1059,6 +1073,8 @@ send_one_buffer:
       }
       gralloc->unlock(gralloc, fb_handle);
       framebuffer_base = NULL;
+      free(gray16_buffer_bak);
+      gray16_buffer = NULL;
   }
 #endif
 

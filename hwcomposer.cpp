@@ -550,7 +550,7 @@ class DrmHotplugHandler : public DrmEventHandler {
 static void init_gamma_table(int gamma_level){
     if(gamma_level < 0 || gamma_level > MAX_GAMMA_LEVEL)
         return;
-    
+
     LOGD("init_gamma_table...  gamma_level= %d",gamma_level);
     int currentGammaLevel = gamma_level;
     last_gamma_level = currentGammaLevel;//记录最新gamma值
@@ -561,7 +561,7 @@ static void init_gamma_table(int gamma_level){
     int mBlackCount;//gammaTable中纯黑灰阶个数
     if(currentGammaLevel < MAX_GAMMA_LEVEL){
         mWhiteCount = DEFAULT_GRAY_WHITE_COUNT + currentGammaLevel / 2;
-        mBlackCount = DEFAULT_GRAY_BLACK_COUNT  + currentGammaLevel * 2 ; 
+        mBlackCount = DEFAULT_GRAY_BLACK_COUNT  + currentGammaLevel * 2 ;
     }else{//最大对比度时，将对比度特殊化设置成黑白两色
         mWhiteCount = 100;
         mBlackCount = 156;
@@ -4084,6 +4084,7 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Regio
   gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&gray256_addr);
 #else
+
   char* framebuffer_base = NULL;
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = fb_target->handle;
@@ -4095,8 +4096,11 @@ int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Regio
   format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
   size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
 
-  gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+  gralloc->lock(gralloc, fb_target->handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&framebuffer_base);
+//  ALOGD("rk-debug %s,line = %d, w = %d , h = %d , lock ret = %d",__FUNCTION__,__LINE__,ebc_buf_info.width,ebc_buf_info.height,ret);
+//  ALOGD("rk-debug %s,line = %d, framebuffer w = %d , h = %d , format =  %d",__FUNCTION__,__LINE__,width,height,format);
+//  ALOGD("rk-debug %s,line = %d, framebuffer base = %p ",__FUNCTION__,__LINE__,framebuffer_base);
 
 #endif
 send_one_buffer:
@@ -4271,6 +4275,8 @@ send_one_buffer:
 
 #else
   //convent all to gray 16.
+  // color_panel : 0 RGA
+  //               1 !RGA
   if (epdMode != EPD_A2)
   {
       if(ebc_buf_info.color_panel == 1)
@@ -4717,9 +4723,9 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
         if (sf_layer != NULL && sf_layer->handle != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
           char value[PROPERTY_VALUE_MAX];
           property_get("debug.enable.worker", value, "1");
-          if(atoi(value) == 1)
+          if(atoi(value) == 1){
             ctx->eink_compositor_worker.QueueComposite(dc,currentA2Region,updateRegion,currentAutoRegion,gCurrentEpdMode,gResetEpdMode);
-          else if(atoi(value) == 0){
+          }else if(atoi(value) == 0){
             if(ctx->drm.isSupportRkRga())
             {
               ret = hwc_set_epd(&hwc_info,sf_layer,currentA2Region,updateRegion,currentAutoRegion);
@@ -5211,7 +5217,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
           hwc_post_epd_logo(NOPOWER_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,NOPOWER_IMAGE_PATH_USER,NOPOWER_IMAGE_PATH_DEFAULT);
         }
-      } else { 
+      } else {
         if (!access(POWEROFF_IMAGE_PATH_USER, R_OK)){
           hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);

@@ -677,21 +677,38 @@ send_one_buffer:
 
 	if(epdMode == EPD_NULL){
     gray256_addr = NULL;
-    if(rga_output_addr != NULL){
-      //Get virtual address
-      const gralloc_module_t *gralloc;
-      int ret = 0;
-      ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                        (const hw_module_t **)&gralloc);
-      if (ret) {
-          ALOGE("Failed to open gralloc module");
-          return ret;
+#if USE_RGA
+      if(rga_output_addr != NULL){
+        //Get virtual address
+        const gralloc_module_t *gralloc;
+        int ret = 0;
+        ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                          (const hw_module_t **)&gralloc);
+        if (ret) {
+            ALOGE("Failed to open gralloc module");
+            return ret;
+        }
+        DrmRgaBuffer &gra_buffer = rgaBuffers[0];
+        buffer_handle_t src_hnd = gra_buffer.buffer()->handle;
+        gralloc->unlock(gralloc, src_hnd);
+        rga_output_addr = NULL;
       }
-      DrmRgaBuffer &gra256_buffer = rgaBuffers[0];
-      buffer_handle_t src_hnd = gra256_buffer.buffer()->handle;
-      gralloc->unlock(gralloc, src_hnd);
-      rga_output_addr = NULL;
-    }
+
+#else
+
+      if(framebuffer_base != NULL){
+          const gralloc_module_t *gralloc;
+          ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                            (const hw_module_t **)&gralloc);
+          if (ret) {
+              ALOGE("Failed to open gralloc module");
+              return ret;
+          }
+          gralloc->unlock(gralloc, fb_handle);
+          framebuffer_base = NULL;
+      }
+#endif
+
     return 0;
 	}
 
@@ -1013,6 +1030,7 @@ send_one_buffer:
 
   ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> end post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());
 
+#if USE_RGA
   if(rga_output_addr != NULL){
     //Get virtual address
     const gralloc_module_t *gralloc;
@@ -1028,6 +1046,21 @@ send_one_buffer:
     gralloc->unlock(gralloc, src_hnd);
     rga_output_addr = NULL;
   }
+
+#else
+
+  if(framebuffer_base != NULL){
+      const gralloc_module_t *gralloc;
+      ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                        (const hw_module_t **)&gralloc);
+      if (ret) {
+          ALOGE("Failed to open gralloc module");
+          return ret;
+      }
+      gralloc->unlock(gralloc, fb_handle);
+      framebuffer_base = NULL;
+  }
+#endif
 
   gray16_buffer_bak = NULL;
   return 0;

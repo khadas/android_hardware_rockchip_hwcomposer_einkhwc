@@ -341,6 +341,90 @@ static inline void apply_white_region(char *buffer, int height, int width, Regio
 }
 
 
+int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle) {
+    ATRACE_CALL();
+    int ret = 0;
+    int rga_transform = 0;
+    int src_l,src_t,src_w,src_h;
+    int dst_l,dst_t,dst_r,dst_b;
+
+    int dst_w,dst_h,dst_stride;
+    int src_buf_w,src_buf_h,src_buf_stride,src_buf_format;
+    rga_info_t src, dst;
+    memset(&src, 0, sizeof(rga_info_t));
+    memset(&dst, 0, sizeof(rga_info_t));
+    src.fd = -1;
+    dst.fd = -1;
+
+
+    //Get virtual address
+    const gralloc_module_t *gralloc;
+    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                      (const hw_module_t **)&gralloc);
+    if (ret) {
+        ALOGE("Failed to open gralloc module");
+        return ret;
+    }
+
+#if (!RK_PER_MODE && RK_DRM_GRALLOC)
+    src_buf_w = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
+#else
+    src_buf_w = hwc_get_handle_width(gralloc,fb_handle);
+    src_buf_h = hwc_get_handle_height(gralloc,fb_handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc,fb_handle);
+    src_buf_format = hwc_get_handle_format(gralloc,fb_handle);
+#endif
+
+    src_l = 0;
+    src_t = 0;
+    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+
+
+    dst_l = 0;
+    dst_t = 0;
+    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+
+
+    if(dst_w < 0 || dst_h <0 )
+      ALOGE("RGA invalid dst_w=%d,dst_h=%d",dst_w,dst_h);
+
+    dst_stride = rgaBuffer.buffer()->getStride();
+
+    src.sync_mode = RGA_BLIT_SYNC;
+    rga_set_rect(&src.rect,
+                src_l, src_t, src_w, src_h,
+                src_buf_stride, src_buf_h, src_buf_format);
+    rga_set_rect(&dst.rect, dst_l, dst_t,  dst_w, dst_h, dst_w, dst_h, HAL_PIXEL_FORMAT_RGBA_8888);
+
+    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+        src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+        dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale : src hnd=%p,dst hnd=%p, format=0x%x, transform=0x%x\n",
+        (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle), HAL_PIXEL_FORMAT_RGBA_8888, rga_transform);
+
+    src.hnd = fb_handle;
+    dst.hnd = rgaBuffer.buffer()->handle;
+    src.rotation = rga_transform;
+
+    RockchipRga& rkRga(RockchipRga::get());
+    ret = rkRga.RkRgaBlit(&src, &dst, NULL);
+    if(ret) {
+        ALOGE("rgaRotateScale error : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+            src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+            dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+        ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
+            strerror(errno), (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle));
+    }
+
+    return ret;
+}
+
+
 int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle) {
     ATRACE_CALL();
     int ret = 0;
@@ -425,6 +509,7 @@ int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_
 
     return ret;
 }
+
 
 int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t       &fb_handle) {
     ATRACE_CALL();
@@ -646,9 +731,12 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
 
 #else
 
-
     char* framebuffer_base = NULL;
-    int width,height,stride,byte_stride,format,size;
+    DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+    if (!rga_buffer.Allocate(ebc_buf_info.fb_width, ebc_buf_info.fb_height, HAL_PIXEL_FORMAT_RGBA_8888)) {
+      ALOGE("Failed to allocate rga buffer with size %dx%d", ebc_buf_info.fb_width, ebc_buf_info.fb_height);
+      return -ENOMEM;
+    }
 
     //Get virtual address
     const gralloc_module_t *gralloc;
@@ -659,18 +747,24 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
         return ret;
     }
 
-    width = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
-    height = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
-    stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
-    byte_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_BYTE_STRIDE);
-    format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
-    size = hwc_get_handle_attibute(gralloc,fb_handle,ATT_SIZE);
+    int width,height,stride,byte_stride,format,size;
+    buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
 
-    ret = gralloc->lock(gralloc, fb_handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+    width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
+    height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
+    stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
+    byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
+    format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
+    size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
+
+    ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
+    if (ret) {
+      ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+      return ret;
+    }
+
+    gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                     0, 0, width, height, (void **)&framebuffer_base);
-
-
-    gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
 
 //    ALOGD("rk-debug %s,line = %d, w = %d , h = %d , lock ret = %d",__FUNCTION__,__LINE__,ebc_buf_info.width,ebc_buf_info.height,ret);
 //    ALOGD("rk-debug %s,line = %d, framebuffer w = %d , h = %d , format =  %d",__FUNCTION__,__LINE__,width,height,format);
@@ -713,7 +807,7 @@ send_one_buffer:
               ALOGE("Failed to open gralloc module");
               return ret;
           }
-          gralloc->unlock(gralloc, fb_handle);
+          gralloc->unlock(gralloc, src_hnd);
           framebuffer_base = NULL;
       }
 #endif
@@ -888,6 +982,8 @@ send_one_buffer:
   //ALOGD("rk-debug %s,line = %d , ebc_buf_info.color_panel = %d",__FUNCTION__,__LINE__,ebc_buf_info.color_panel);
 
   //convent all to gray 16.
+  //color_panel   : 0 RGA + Neon = 黑白屏
+  //              : 1 彩屏 - CPU
   if (epdMode != EPD_A2)
   {
       if(ebc_buf_info.color_panel == 1)
@@ -1071,10 +1167,8 @@ send_one_buffer:
           ALOGE("Failed to open gralloc module");
           return ret;
       }
-      gralloc->unlock(gralloc, fb_handle);
+      gralloc->unlock(gralloc, src_hnd);
       framebuffer_base = NULL;
-      free(gray16_buffer_bak);
-      gray16_buffer = NULL;
   }
 #endif
 

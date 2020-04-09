@@ -118,7 +118,7 @@ struct win_coordinate{
 };
 
 
-#define USE_RGA 1
+#define USE_RGA 0
 
 #define GET_EBC_BUFFER 0x7000
 #define SET_EBC_SEND_BUFFER 0x7001
@@ -152,6 +152,7 @@ class EinkCompositorWorker : public Worker {
   int CreateNextTimelineFence();
   int FinishComposition(int timeline);
   int Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
+  int Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int PostEink(int *buffer, Rect rect, int mode);
   int SetEinkMode(const buffer_handle_t &fb_handle, Region &A2Region,Region &updateRegion,Region &AutoRegion);

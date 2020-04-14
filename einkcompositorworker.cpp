@@ -683,8 +683,8 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
   char* framebuffer_base = NULL;
   int framebuffer_wdith, framebuffer_height, output_format;
   if (ebc_buf_info.color_panel == 0) {
-    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 16);
-    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 16);
+    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
     output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
   }
   else if (ebc_buf_info.color_panel == 1) {

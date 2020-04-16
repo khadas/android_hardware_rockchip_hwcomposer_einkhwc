@@ -3774,7 +3774,7 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
 
     size_t count = 0;
     const Rect* rects = region.getArray(&count);
-    for (int i = 0;i < (int)count;i++) {
+    for (size_t i = 0;i < (int)count;i++) {
         memset(line_buffer[0], 0, panel_w << 1);
         memset(line_buffer[1], 0, panel_w << 1);
 
@@ -4706,20 +4706,20 @@ int hwc_post_epd_logo(const char src_path[]) {
     if (ebc_buf_info.color_panel == 1)
         Rgb888_to_color_eink((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/3, ebc_buf_info.width/3, ebc_buf_info.vir_width);
     else
-        logo_gray256_to_gray16((char *)image_addr, gray16_buffer, ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);	
+        logo_gray256_to_gray16((char *)image_addr, gray16_buffer, ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
 
     //EPD post
     gCurrentEpdMode = EPD_BLOCK;
     Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
     hwc_post_epd(gray16_buffer, rect, EPD_BLOCK);
     gCurrentEpdMode = EPD_BLOCK;
-  
+
     free(image_addr);
     image_addr = NULL;
     free(gray16_buffer);
     gray16_buffer = NULL;
     gray16_buffer_bak = NULL;
-  
+
     return 0;
 }
 

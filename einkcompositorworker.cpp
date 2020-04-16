@@ -739,7 +739,7 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
         return ret;
       }
       gray256_addr = rga_output_addr;
-    } 
+    }
   }
   else {
     gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
@@ -948,6 +948,8 @@ send_one_buffer:
     }
   }
 
+  Region screenRegion(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
+
   switch(epdMode){
       case EPD_FULL:
       case EPD_FULL_WIN:
@@ -964,78 +966,25 @@ send_one_buffer:
               epdMode = EPD_PART;
           }
           else {
-              Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-              if(log_level(DBG_DEBUG))
-                  screenRegion.dump("fremebuffer1 screenRegion");
-              if (screenRegion.subtract(A2Region).isEmpty() &&
-                      screenRegion.subtract(gLastA2Region).isEmpty()) {
-                  //all screen region was in a2 mode.
-                  if(log_level(DBG_DEBUG))
-                      screenRegion.dump("fremebuffer subtract screenRegion");
-                  if(enable_kymix == 0)
-                    gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-                  break;
-              }
-              //window a2.
-              if(enable_kymix == 0)
-                  Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
-                                ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
               if (A2Region.isEmpty()) {
                   //ALOGE("quit A2");
-                  //get out a2 mode.
-                  //1.reset updated region to white.
-                  updateRegion.orSelf(gLastA2Region);
-                  updateRegion.orSelf(gSavedUpdateRegion);
                   gLastA2Region.clear();
                   gSavedUpdateRegion.clear();
-                  //apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.vir_width, updateRegion,&ebc_buf_info);
-
-                  //2//.paint updated region.
-                  //epdMode = EPD_A2;//EPD_BLACK_WHITE;//
-                  //PostEink(gray16_buffer, postRect, epdMode);
-
-                  //3.will repaint those regions in full mode.
                   gCurrentEpdMode = EPD_FULL;
-                  Rect rect = updateRegion.getBounds();
-                  postRect = rect;
+                  postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
                   goto    send_one_buffer;
-              }
-
-              Region newA2Region = A2Region - gSavedUpdateRegion - gLastA2Region;
-              Region newUpdateRegion = updateRegion - gSavedUpdateRegion - gLastA2Region;
-              if(log_level(DBG_DEBUG)){
-                  newA2Region.dump("fremebuffer1 newA2Region");
-                  newUpdateRegion.dump("fremebuffer1 newUpdateRegion");
-                  A2Region.dump("fremebuffer1 currentA2Region");
-              }
-
-              //update saved region info.
-              gSavedUpdateRegion.orSelf(gLastA2Region);
-              gSavedUpdateRegion.orSelf(updateRegion);
-
-              gLastA2Region = A2Region;
-              gray256_to_gray2_dither((char *)gray256_addr,
-                      (char *)gray16_buffer, ebc_buf_info.vir_height,
-                      (ebc_buf_info.color_panel ? ebc_buf_info.fb_width * 3: ebc_buf_info.width),
-                      ebc_buf_info.vir_width, gSavedUpdateRegion);
-
-              if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
-                  //has new region.
-                  if(log_level(DBG_DEBUG)){
-                      newA2Region.dump("fremebuffer2 newA2Region");
-                      newUpdateRegion.dump("fremebuffer2 newUpdateRegion");
+              }else{
+                  if(gLastA2Region.isEmpty()){
+                      gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
+                      gLastA2Region = screenRegion;
+                      epdMode = EPD_BLACK_WHITE;
+                  }else{
+                      gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
+                      gLastA2Region = screenRegion;
                   }
-                  //1.reset new region to white, and paint them.
-                  //apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
-                  //        ebc_buf_info.vir_width, newUpdateRegion | newA2Region,&ebc_buf_info);
-                  epdMode = EPD_BLACK_WHITE;
-                  //PostEink(gray16_buffer, postRect, epdMode);
-                  //2.will repaint those regions in a2 mode.
-                  //goto    send_one_buffer;
               }
-              //not_fullmode_count++;
-              break;
           }
+          break;
       case EPD_BLOCK:
          // release_wake_lock("show_advt_lock");
       default:

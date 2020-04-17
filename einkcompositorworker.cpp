@@ -948,8 +948,6 @@ send_one_buffer:
     }
   }
 
-  Region screenRegion(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
-
   switch(epdMode){
       case EPD_FULL:
       case EPD_FULL_WIN:
@@ -966,6 +964,7 @@ send_one_buffer:
               epdMode = EPD_PART;
           }
           else {
+              Region screenRegion(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
               if (A2Region.isEmpty()) {
                   //ALOGE("quit A2");
                   gLastA2Region.clear();

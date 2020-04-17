@@ -38,7 +38,16 @@
 #define LOG_TAG "hwcomposer-drm"
 
 // #define ENABLE_DEBUG_LOG
-#include <log/custom_log.h>
+//#include <log/custom_log.h>
+#include "SkBitmap.h"
+#include "SkCanvas.h"
+#include "SkImageInfo.h"
+#include "SkStream.h"
+#include "SkImage.h"
+#include "SkEncodedImageFormat.h"
+#include "SkImageEncoder.h"
+#include "SkCodec.h"
+#include "SkData.h"
 
 #include "drmhwcomposer.h"
 #include "drmeventlistener.h"
@@ -88,6 +97,10 @@
 #include <fcntl.h>
 //map header
 #include <map>
+
+#include <sys/inotify.h>
+#include <sys/prctl.h>
+#include <sys/epoll.h>
 
 //gui
 #include <ui/Rect.h>
@@ -4596,6 +4609,56 @@ void hwc_free_buffer(hwc_drm_display_t *hd) {
 }
 #endif
 
+bool decode_image_file(const char* filename, SkBitmap* bitmap,
+                               SkColorType colorType = kN32_SkColorType,
+                               bool requireUnpremul = false) {
+    sk_sp<SkData> data(SkData::MakeFromFileName(filename));
+    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
+    if (!codec) {
+        return false;
+    }
+
+    SkImageInfo info = codec->getInfo().makeColorType(colorType);
+    if (requireUnpremul && kPremul_SkAlphaType == info.alphaType()) {
+        info = info.makeAlphaType(kUnpremul_SkAlphaType);
+    }
+
+    if (!bitmap->tryAllocPixels(info)) {
+        return false;
+    }
+
+    return SkCodec::kSuccess == codec->getPixels(info, bitmap->getPixels(), bitmap->rowBytes());
+}
+
+void drawLogoPic(const char src_path[], void* buf, int width, int height)
+{
+    ALOGD(" in drawLogoPic begin");
+    SkBitmap bitmap;
+    if (!decode_image_file(src_path, &bitmap)) {
+        ALOGE("drawLogoPic decode_image_file error path:%s", src_path);
+        return;
+    }
+
+    SkBitmap dst;
+    SkImageInfo info = SkImageInfo::MakeN32(width, height,
+                           kOpaque_SkAlphaType);
+    dst.installPixels(info, buf, width * 4);
+
+    SkCanvas canvas(dst);
+    canvas.drawColor(SK_ColorWHITE);
+
+    SkIRect srcRect;
+    srcRect.set(0, 0, bitmap.width(), bitmap.height());
+    SkRect dstRect;
+    dstRect.iset(0, 0, width, height);
+
+    //canvas.rotate(-90);
+    //canvas.translate(-height,0);
+    canvas.drawBitmap(bitmap,0, 0, NULL);
+    //canvas.translate(-height,0);
+    //canvas.rotate(-90);
+}
+
 static void inputJpgLogo(const char src_path[],void *dst, int w, int h, int color)
 {
         int bpp = 1.5;
@@ -4681,13 +4744,15 @@ int hwc_post_epd_logo(const char src_path[]) {
     void *image_addr;
 
     if (ebc_buf_info.color_panel == 1) {
-        ALOGD("lyx: ebc_buf_info.color_panel == 1\n");
         image_addr = (char *)malloc((ebc_buf_info.width/3) * (ebc_buf_info.height/3) * 4);
-        inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3, 1);
+        //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3, 1);
+        drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3);
     }
     else {
-        image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
-        inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height, 0);
+        //image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
+        //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height, 0);
+        image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
+        drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height);
     }
 
     gray16_buffer = (int *)malloc(ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
@@ -4706,7 +4771,8 @@ int hwc_post_epd_logo(const char src_path[]) {
     if (ebc_buf_info.color_panel == 1)
         Rgb888_to_color_eink((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/3, ebc_buf_info.width/3, ebc_buf_info.vir_width);
     else
-        logo_gray256_to_gray16((char *)image_addr, gray16_buffer, ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
+        //logo_gray256_to_gray16((char *)image_addr, gray16_buffer, ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);	
+	neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(image_addr), ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
 
     //EPD post
     gCurrentEpdMode = EPD_BLOCK;
@@ -4945,9 +5011,9 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
         if (sf_layer != NULL && sf_layer->handle != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
           char value[PROPERTY_VALUE_MAX];
           property_get("debug.enable.worker", value, "1");
-          if(atoi(value) == 1){
+          if(atoi(value) == 1)
             ctx->eink_compositor_worker.QueueComposite(dc,currentA2Region,updateRegion,currentAutoRegion,gCurrentEpdMode,gResetEpdMode);
-          }else if(atoi(value) == 0){
+          else if(atoi(value) == 0){
             if(ctx->drm.isSupportRkRga())
             {
               ret = hwc_set_epd(&hwc_info,sf_layer,currentA2Region,updateRegion,currentAutoRegion);

@@ -50,7 +50,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libui \
 	libutils \
         librga \
-        libmpp
+        libmpp \
+        libskia 
 
 LOCAL_STATIC_LIBRARIES := \
 	libtinyxml2
@@ -65,7 +66,11 @@ LOCAL_C_INCLUDES := \
 	system/core/libsync/include \
 	hardware/rockchip/librga \
         $(LOCAL_PATH)/JpgDecoder/inc/mpp_inc/ \
-        $(LOCAL_PATH)/JpgDecoder/inc
+        $(LOCAL_PATH)/JpgDecoder/inc \
+	external/skia/include/utils \
+	external/skia/include/private \
+	external/skia/include/core \
+	external/skia/src/core
 
 LOCAL_SRC_FILES := \
 	autolock.cpp \

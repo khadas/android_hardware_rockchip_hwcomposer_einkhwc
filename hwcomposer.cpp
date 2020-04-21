@@ -564,7 +564,7 @@ static void init_gamma_table(int gamma_level){
     if(gamma_level < 0 || gamma_level > MAX_GAMMA_LEVEL)
         return;
 
-    LOGD("init_gamma_table...  gamma_level= %d",gamma_level);
+    ALOGD("init_gamma_table...  gamma_level= %d",gamma_level);
     int currentGammaLevel = gamma_level;
     last_gamma_level = currentGammaLevel;//记录最新gamma值
 
@@ -1423,13 +1423,13 @@ int DrmHwcLayer::InitFromHwcLayer(struct hwc_context_t *ctx, int display, hwc_la
     return ret;
 #endif
 
-    D("to check AFBC.");
+    ALOGD("to check AFBC.");
 
 #if USE_AFBC_LAYER
     // if(sf_handle)
     if ( sf_handle && bFbTarget_ )
     {
-        D("we got buffer handle for fb_target_layer, to get internal_format.");
+        ALOGD("we got buffer handle for fb_target_layer, to get internal_format.");
 #if RK_PER_MODE
         struct gralloc_drm_handle_t* drm_hnd = (struct gralloc_drm_handle_t *)sf_handle;
         internal_format = drm_hnd->internal_format;
@@ -1443,18 +1443,18 @@ int DrmHwcLayer::InitFromHwcLayer(struct hwc_context_t *ctx, int display, hwc_la
 #endif
         if(isAfbcInternalFormat(internal_format))
         {
-            D("to set 'is_afbc'.");
+            ALOGD("to set 'is_afbc'.");
             is_afbc = true;
         }
         else
         {
-            D("not a afbc_buffer.");
+            ALOGD("not a afbc_buffer.");
         }
     }
 
     if(bFbTarget_ && !sf_handle)
     {
-        D("we could not got buffer handle, and current buffer is for fb_target_layer, to check AFBC in a trick way.");
+        ALOGD("we could not got buffer handle, and current buffer is for fb_target_layer, to check AFBC in a trick way.");
 
         static int iFbdcSupport = -1;
         D_DEC(iFbdcSupport);
@@ -1469,13 +1469,13 @@ int DrmHwcLayer::InitFromHwcLayer(struct hwc_context_t *ctx, int display, hwc_la
             iFbdcSupport = atoi(fbdc_value);
             if(iFbdcSupport > 0 && display == 0)
             {
-                D("to set 'is_afbc'.");
+                ALOGD("to set 'is_afbc'.");
                 is_afbc = true;
             }
         }
         else if(iFbdcSupport > 0 && display == 0)
         {
-            D("to set 'is_afbc'.");
+            ALOGD("to set 'is_afbc'.");
             is_afbc = true;
         }
     }
@@ -5673,7 +5673,7 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
     height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
   }
   else if (ebc_buf_info.color_panel == 1) {
-    LOGD("lyx: ebc_buf_info.color_panel == 1\n");
+    ALOGD("lyx: ebc_buf_info.color_panel == 1\n");
     width = ebc_buf_info.fb_width/3 - ((ebc_buf_info.fb_width/3) % 8);
     height = ebc_buf_info.fb_height/3 - ((ebc_buf_info.fb_height/3) % 2);
   }

@@ -4973,8 +4973,10 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   property_get("debug.property.enable", value, "0");
   if(atoi(value) > 0){
       property_get("debug.mode", value, "0");
-      gCurrentEpdMode = atoi(value);
-      //gResetEpdMode = atoi(value);
+
+      if (gCurrentEpdMode != EPD_UNBLOCK)
+          gCurrentEpdMode = atoi(value);
+
       if(gCurrentEpdMode == EPD_A2){
 	   if (ebc_buf_info.color_panel == 1) {
             Region screenRegion(Rect(0, 0, ebc_buf_info.width/3, ebc_buf_info.height/3));

@@ -3998,6 +3998,154 @@ void Rgb888_to_color_eink(char *dst,int *src,int  fb_height, int fb_width,int vi
     }
 }
 
+void Rgb888_to_color_eink2(char *dst,int *src,int  fb_height, int fb_width, int vir_width)
+{
+    int count;
+    int src_data;
+    int  r1,g1,b1,r2,b2,g2,r3,g3,b3;
+    int i,j;
+    int *temp_src;
+    char *temp_dst,*temp1_dst,*temp2_dst;
+#if 0
+    for(i = 0; i < fb_height;i++){//RGB888->RGB444
+		temp_dst = dst;
+
+        for(j = 0; j<fb_width/2;j++){
+            src_data = *src++;
+            g0 =  (src_data&0xf0)>>4;
+            g1 = (src_data&0xf000)>>8;
+            g2 = (src_data&0xf00000)>>20;
+            src_data = *src++;
+            g3 =  src_data&0xf0;
+            g4 = (src_data&0xf000)>>12;
+            g5 = (src_data&0xf00000)>>16;
+            *dst++ = g0|g1;
+            *dst++ = g2|g3;
+            *dst++ = g4|g5;
+        }
+	  dst = temp_dst + vir_width/2;
+    }
+#endif
+
+  char value[PROPERTY_VALUE_MAX];
+  property_get("debug.eink.rgb", value, "0");
+  int new_value = 0;
+  new_value = atoi(value);
+
+  for(i = 0; i < fb_height;i++){//RGB888->RGB444
+      temp_dst = dst;
+      temp1_dst = dst;
+      temp2_dst = dst + fb_width;
+      for(j = 0; j< fb_width;){
+          if(new_value == 1){
+
+              src_data = *src++;
+              r1 = 0xf0;
+              g1 = 0x0;
+              b1 = 0x0;
+              src_data = *src++;
+              r2 = 0xf0;
+              g2 = 0x0;
+              b2 = 0x0;
+              src_data = *src++;
+              r3 = 0xf0;
+              g3 = 0x0;
+              b3 = 0x0;
+
+          }else if(new_value == 2){
+              src_data = *src++;
+              r1 = 0x0;
+              g1 = 0xf000;
+              b1 = 0x0;
+              src_data = *src++;
+              r2 = 0x0;
+              g2 = 0xf000;
+              b2 = 0x0;
+              src_data = *src++;
+              r3 = 0x0;
+              g3 = 0xf000;
+              b3 = 0x0;
+          }else if(new_value == 3){
+              src_data = *src++;
+              r1 = 0x0;
+              g1 = 0x0;
+              b1 = 0xf00000;
+              src_data = *src++;
+              r2 = 0x0;
+              g2 = 0x0;
+              b2 = 0xf00000;
+              src_data = *src++;
+              r3 = 0x0;
+              g3 = 0x0;
+              b3 = 0xf00000;
+          }else{
+              src_data = *src++;
+              b1 = src_data&0xf00000;
+              g1 = src_data&0xf000;
+              r1 = src_data&0xf0;
+              src_data = *src++;
+              b2 = src_data&0xf00000;
+              g2 = src_data&0xf000;
+              r2 = src_data&0xf0;
+              src_data = *src++;
+              b3 = src_data&0xf00000;
+              g3 = src_data&0xf000;
+              r3 = src_data&0xf0;
+          }
+          if(i % 3 == 0){
+              dst = temp1_dst;
+              *dst++ = ((g1 >> 12) | (r1 >> 0));
+              *dst++ = ((b2 >> 20)  | (g2 >> 8));
+              *dst++ = ((r3 >> 4)  | (b3 >> 16));
+              temp1_dst = dst;
+
+              dst = temp2_dst;
+              *dst++ = ((b1 >> 20) | (g1 >> 8));
+              *dst++ = ((r2 >> 4) | (b2 >> 16));
+              *dst++ = ((g3 >> 12)  | (r3 >> 0));
+              temp2_dst = dst;
+          }else if(i % 3 == 1){
+
+              dst = temp1_dst;
+              *dst++ = ((r1 >> 4) | (b1 >> 16));
+              *dst++ = ((g2 >> 12)  | (r2 >> 0));
+              *dst++ = ((b3 >> 20)  | (g3 >> 8));
+              temp1_dst = dst;
+
+              dst = temp_dst + (fb_width);
+
+              dst = temp2_dst;
+              *dst++ = ((g1 >> 12) | (r1 >> 0));
+              *dst++ = ((b2 >> 20) | (g2 >> 8));
+              *dst++ = ((r3 >> 4)  | (b3 >> 16));
+              temp2_dst = dst;
+
+          }else if(i % 3 == 2){
+
+              dst = temp1_dst;
+              *dst++ = ((b1 >> 20) | (g1 >> 8));
+              *dst++ = ((r2 >> 4)  | (b2 >> 16));
+              *dst++ = ((g3 >> 12)  | (r3 >> 0));
+              temp1_dst = dst;
+
+              dst = temp_dst + (fb_width);
+
+              dst = temp2_dst;
+              *dst++ = ((r1 >> 4) | (b1 >> 16));
+              *dst++ = ((g2 >> 12) | (r2 >> 0));
+              *dst++ = ((b3 >> 20)  | (g3 >> 8));
+              temp2_dst = dst;
+          }
+          j = j + 3;
+          if( j == 723){
+            j++;
+            src++;
+          }
+      }
+  dst = temp_dst + vir_width;
+  }
+}
+
 void neon_rgb888_to_gray256ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w)
 {
    if((vir_w % 32) == 0){
@@ -4748,6 +4896,11 @@ int hwc_post_epd_logo(const char src_path[]) {
         //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3, 1);
         drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3);
     }
+    else if (ebc_buf_info.color_panel == 2) {
+        image_addr = (char *)malloc((ebc_buf_info.width/2) * (ebc_buf_info.height/2) * 4);
+        //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width/2, ebc_buf_info.height/2, 1);
+        drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width/2, ebc_buf_info.height/2);
+    }
     else {
         //image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
         //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height, 0);
@@ -4770,6 +4923,8 @@ int hwc_post_epd_logo(const char src_path[]) {
 
     if (ebc_buf_info.color_panel == 1)
         Rgb888_to_color_eink((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/3, ebc_buf_info.width/3, ebc_buf_info.vir_width);
+    else if (ebc_buf_info.color_panel == 2)
+        Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/2, ebc_buf_info.width/2, ebc_buf_info.vir_width);
     else
         //logo_gray256_to_gray16((char *)image_addr, gray16_buffer, ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);	
 	neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(image_addr), ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
@@ -4982,6 +5137,10 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
             Region screenRegion(Rect(0, 0, ebc_buf_info.width/3, ebc_buf_info.height/3));
             currentAutoRegion.orSelf(screenRegion);
 	   }
+	   else if (ebc_buf_info.color_panel == 2) {
+            Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
+            currentAutoRegion.orSelf(screenRegion);
+	   }
 	   else {
             Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
             currentA2Region.orSelf(screenRegion);
@@ -4990,6 +5149,10 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
       if(gCurrentEpdMode == EPD_AUTO){
 	   if (ebc_buf_info.color_panel == 1) {
             Region screenRegion(Rect(0, 0, ebc_buf_info.width/3, ebc_buf_info.height/3));
+            currentAutoRegion.orSelf(screenRegion);
+	   }
+	   else if (ebc_buf_info.color_panel == 2) {
+            Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
             currentAutoRegion.orSelf(screenRegion);
 	   }
 	   else {
@@ -5676,6 +5839,11 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
     ALOGD("lyx: ebc_buf_info.color_panel == 1\n");
     width = ebc_buf_info.fb_width/3 - ((ebc_buf_info.fb_width/3) % 8);
     height = ebc_buf_info.fb_height/3 - ((ebc_buf_info.fb_height/3) % 2);
+  }
+  else if (ebc_buf_info.color_panel == 2) {
+    ALOGD("lyx: ebc_buf_info.color_panel == 2\n");
+    width = ebc_buf_info.fb_width/2;// - ((ebc_buf_info.fb_width/2) % 8);
+    height = ebc_buf_info.fb_height/2;// - ((ebc_buf_info.fb_height/2) % 2);
   }
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;

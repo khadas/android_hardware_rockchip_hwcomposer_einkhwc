@@ -308,6 +308,7 @@ extern void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,
 extern int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, int panel_w,int vir_width,Region region);
 
 extern void Rgb888_to_color_eink(char *dst,int *src,int  fb_height, int fb_width,int vir_width);
+extern void Rgb888_to_color_eink2(char *dst,int *src,int  fb_height, int fb_width,int vir_width);
 
 extern void neon_rgb888_to_gray256ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
 
@@ -393,6 +394,12 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
       src_h = ebc_buf_info.fb_height/3 - ((ebc_buf_info.fb_height/3) % 2);
       dst_w = ebc_buf_info.fb_width/3 - ((ebc_buf_info.fb_width/3) % 8);
       dst_h = ebc_buf_info.fb_height/3 - ((ebc_buf_info.fb_height/3) % 2);
+    }
+    else if (ebc_buf_info.color_panel == 2) {
+      src_w = ebc_buf_info.fb_width/2;// - ((ebc_buf_info.fb_width/2) % 8);
+      src_h = ebc_buf_info.fb_height/2;// - ((ebc_buf_info.fb_height/2) % 2);
+      dst_w = ebc_buf_info.fb_width/2;// - ((ebc_buf_info.fb_width/2) % 8);
+      dst_h = ebc_buf_info.fb_height/2;// - ((ebc_buf_info.fb_height/2) % 2);
     }
 
     if(dst_w < 0 || dst_h <0 )
@@ -692,6 +699,11 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
     framebuffer_height = ebc_buf_info.fb_height/3;
     output_format = HAL_PIXEL_FORMAT_RGBA_8888;
   }
+  else if (ebc_buf_info.color_panel == 2) {
+    framebuffer_wdith = ebc_buf_info.fb_width/2;
+    framebuffer_height = ebc_buf_info.fb_height/2;
+    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
+  }
 
   DrmRgaBuffer &rga_buffer = rgaBuffers[0];
   if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
@@ -750,34 +762,6 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
       ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
       return ret;
     }
-{
-  char value[PROPERTY_VALUE_MAX];
-  property_get("debug.dump.rgba", value, "0");
-  int new_value = 0;
-  new_value = atoi(value);
-  if(new_value > 0){
-      char data_name[100] ;
-      static int DumpSurfaceCount = 0;
-
-      sprintf(data_name,"/data/dump/dmlayer%d_%d_%d.bin", DumpSurfaceCount,
-	  	ebc_buf_info.fb_width/3, ebc_buf_info.fb_height/3);
-      DumpSurfaceCount++;
-      FILE *file = fopen(data_name, "wb+");
-      if (!file)
-      {
-          ALOGW("Could not open %s\n",data_name);
-      } else{
-          ALOGW("open %s and write ok\n",data_name);
-          fwrite(framebuffer_base, (ebc_buf_info.fb_width/3) * (ebc_buf_info.fb_height/3) * 4 , 1, file);
-          fclose(file);
-
-      }
-      if(DumpSurfaceCount > 20){
-          property_set("debug.dump.rgba","0");
-          DumpSurfaceCount = 0;
-      }
-  }
-}
   }
 #else
 
@@ -899,6 +883,12 @@ send_one_buffer:
   if (ebc_buf_info.color_panel == 1) {
     Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),
 		height - (height%2),width-(width%8),ebc_buf_info.vir_width);
+  }
+ else if (ebc_buf_info.color_panel == 2) {
+    ALOGD("lyx: rgb888: height = %d, width = %d\n", height, width);
+    Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),
+		height,width,ebc_buf_info.vir_width);
+		//height - (height%2),width-(width%8),ebc_buf_info.vir_width);
   }
   else if(enable_kymix == 0) {
     if(epdMode == EPD_AUTO)

@@ -150,7 +150,7 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
   if(ioctl(ebc_fd, GET_EBC_BUFFER_INFO,&ebc_buf_info)!=0){
       ALOGE("GET_EBC_BUFFER failed\n");
   }
-  ebc_buffer_base = mmap(0, ebc_buf_info.vir_width*ebc_buf_info.vir_height*2, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
+  ebc_buffer_base = mmap(0, ebc_buf_info.vir_width*ebc_buf_info.vir_height*3, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
   if (ebc_buffer_base == MAP_FAILED) {
       ALOGE("Error mapping the ebc buffer (%s)\n", strerror(errno));
   }

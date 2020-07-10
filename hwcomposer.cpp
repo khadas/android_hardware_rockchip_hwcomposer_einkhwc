@@ -109,7 +109,7 @@
 
 //Image jpg decoder
 #include "MpiJpegDecoder.h"
-
+#include "libcfa/libcfa.h"
 
 #define UM_PER_INCH 25400
 
@@ -3836,10 +3836,10 @@ void Rgb888_to_color_eink(char *dst,int *src,int  fb_height, int fb_width,int vi
     char value[PROPERTY_VALUE_MAX];
     property_get("debug.eink.rgb", value, "0");
     new_value = atoi(value);
-    ALOGD("lyx: fb_height = %d, fb_width = %d, vir_width = %d\n", fb_height, fb_width, vir_width);
+    //ALOGD("lyx: fb_height = %d, fb_width = %d, vir_width = %d\n", fb_height, fb_width, vir_width);
 
     dst_dep = fb_width % 6;
-    ALOGD("lyx: dst_dep = %d\n", dst_dep);
+    //ALOGD("lyx: dst_dep = %d\n", dst_dep);
     for (i = 0; i < fb_height; i++) {
         temp_src = src + (i * fb_width);
         temp_dst = dst + (i * 3 * vir_width / 2);
@@ -4269,8 +4269,8 @@ static inline void apply_white_region(char *buffer, int height, int width, Regio
     size_t count = 0;
     const Rect* rects = region.getArray(&count);
     for (int i = 0;i < (int)count;i++) {
-	 left = ebc_buf_info.color_panel? rects[i].left*3 : rects[i].left;
-	 right = ebc_buf_info.color_panel? rects[i].right*3 : rects[i].right;
+	 left = rects[i].left;
+	 right = rects[i].right;
         int w = right - left;
         int offset = rects[i].top * width + left;
         for (int h = rects[i].top;h <= rects[i].bottom && h < height;h++) {
@@ -4465,7 +4465,7 @@ send_one_buffer:
       case 3:
         gray256_to_gray2_dither((char *)gray256_addr,
               (char *)gray16_buffer, ebc_buf_info.vir_height,
-              (ebc_buf_info.color_panel ? ebc_buf_info.fb_width * 3: ebc_buf_info.width),
+              ebc_buf_info.width,
               ebc_buf_info.vir_width, AutoRegion);
         break;
       case 4:
@@ -4556,7 +4556,7 @@ send_one_buffer:
               gLastA2Region = A2Region;
               gray256_to_gray2_dither((char *)gray256_addr,
                       (char *)gray16_buffer, ebc_buf_info.vir_height,
-                      (ebc_buf_info.color_panel ? ebc_buf_info.fb_width * 3: ebc_buf_info.width),
+                      ebc_buf_info.width,
                       ebc_buf_info.vir_width, gSavedUpdateRegion);
 
               if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
@@ -4586,18 +4586,17 @@ send_one_buffer:
   }
 
 #else
-  //convent all to gray 16.
-  // color_panel : 0 RGA
-  //               1 !RGA
   if (epdMode != EPD_A2)
   {
       if(ebc_buf_info.color_panel == 1)
       {
-      int i;
-      int *temp_rgb;
-      int*temp_gray;
-      temp_rgb = (int*)(framebuffer_base);
-      temp_gray = (int*)gray16_buffer;
+          int i;
+          int *temp_rgb;
+          int*temp_gray;
+          temp_rgb = (int*)(framebuffer_base);
+          temp_gray = (int*)gray16_buffer;
+          //image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(new_buffer));  
+          //neon_rgb888_to_gray16ARM((uint8_t *)gray16_buffer, (uint8_t *)(new_buffer),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
           Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
       }
       else if(gPixel_format==8) {
@@ -4693,7 +4692,7 @@ send_one_buffer:
                 gLastA2Region = A2Region;
                 gray256_to_gray2_dither((char *)gray_256,
                         (char *)gray16_buffer, ebc_buf_info.vir_height,
-                       ( ebc_buf_info.color_panel ?ebc_buf_info.fb_width*3:ebc_buf_info.width), ebc_buf_info.vir_width,
+                        ebc_buf_info.width, ebc_buf_info.vir_width,
                         gSavedUpdateRegion);
                 if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
                     //has new region.
@@ -4890,20 +4889,21 @@ DECODE_OUT:
 int hwc_post_epd_logo(const char src_path[]) {
     int *gray16_buffer;
     void *image_addr;
+    void *image_new_addr;
 
     if (ebc_buf_info.color_panel == 1) {
-        image_addr = (char *)malloc((ebc_buf_info.width/3) * (ebc_buf_info.height/3) * 4);
-        //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3, 1);
-        drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width/3, ebc_buf_info.height/3);
+        image_new_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
+        image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
+        drawLogoPic(src_path, (void *)image_new_addr, ebc_buf_info.width, ebc_buf_info.height);
+	 image_to_cfa_grayscale(ebc_buf_info.width, ebc_buf_info.height, (unsigned char*)(image_new_addr), (unsigned char*)(image_addr));
+	 free(image_new_addr);
+	 image_new_addr = NULL;
     }
     else if (ebc_buf_info.color_panel == 2) {
         image_addr = (char *)malloc((ebc_buf_info.width/2) * (ebc_buf_info.height/2) * 4);
-        //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width/2, ebc_buf_info.height/2, 1);
         drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width/2, ebc_buf_info.height/2);
     }
     else {
-        //image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 1.5);
-        //inputJpgLogo(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height, 0);
         image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
         drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height);
     }
@@ -4921,12 +4921,9 @@ int hwc_post_epd_logo(const char src_path[]) {
         hwc_post_epd(gray16_buffer_bak, rect, EPD_BLACK_WHITE);
     }
 
-    if (ebc_buf_info.color_panel == 1)
-        Rgb888_to_color_eink((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/3, ebc_buf_info.width/3, ebc_buf_info.vir_width);
-    else if (ebc_buf_info.color_panel == 2)
+    if (ebc_buf_info.color_panel == 2)
         Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/2, ebc_buf_info.width/2, ebc_buf_info.vir_width);
     else
-        //logo_gray256_to_gray16((char *)image_addr, gray16_buffer, ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);	
 	neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(image_addr), ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
 
     //EPD post
@@ -5133,11 +5130,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
           gCurrentEpdMode = atoi(value);
 
       if(gCurrentEpdMode == EPD_A2){
-	   if (ebc_buf_info.color_panel == 1) {
-            Region screenRegion(Rect(0, 0, ebc_buf_info.width/3, ebc_buf_info.height/3));
-            currentAutoRegion.orSelf(screenRegion);
-	   }
-	   else if (ebc_buf_info.color_panel == 2) {
+	   if (ebc_buf_info.color_panel == 2) {
             Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
             currentAutoRegion.orSelf(screenRegion);
 	   }
@@ -5147,11 +5140,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
 	   }
       }
       if(gCurrentEpdMode == EPD_AUTO){
-	   if (ebc_buf_info.color_panel == 1) {
-            Region screenRegion(Rect(0, 0, ebc_buf_info.width/3, ebc_buf_info.height/3));
-            currentAutoRegion.orSelf(screenRegion);
-	   }
-	   else if (ebc_buf_info.color_panel == 2) {
+	   if (ebc_buf_info.color_panel == 2) {
             Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
             currentAutoRegion.orSelf(screenRegion);
 	   }
@@ -5831,19 +5820,13 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
     return 0;
 
   uint32_t width = 0, height = 0 , vrefresh = 0 ;
-  if (ebc_buf_info.color_panel == 0) {
-    width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
-  }
-  else if (ebc_buf_info.color_panel == 1) {
-    ALOGD("lyx: ebc_buf_info.color_panel == 1\n");
-    width = ebc_buf_info.fb_width/3 - ((ebc_buf_info.fb_width/3) % 8);
-    height = ebc_buf_info.fb_height/3 - ((ebc_buf_info.fb_height/3) % 2);
-  }
-  else if (ebc_buf_info.color_panel == 2) {
-    ALOGD("lyx: ebc_buf_info.color_panel == 2\n");
+  if (ebc_buf_info.color_panel == 2) {
     width = ebc_buf_info.fb_width/2;// - ((ebc_buf_info.fb_width/2) % 8);
     height = ebc_buf_info.fb_height/2;// - ((ebc_buf_info.fb_height/2) % 2);
+  }
+  else {
+    width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
   }
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;

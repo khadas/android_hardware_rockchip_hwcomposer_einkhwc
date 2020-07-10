@@ -38,6 +38,15 @@ ifeq ($(strip $(BOARD_USES_DRM_HWCOMPOSER)),true)
 
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
+LOCAL_MODULE_SUFFIX := .so
+LOCAL_MODULE := libcfa
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := SHARED_LIBRARIES
+LOCAL_SRC_FILES_arm := libcfa/lib32/libcfa.so
+LOCAL_32_BIT_ONLY := true
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
 
 LOCAL_SHARED_LIBRARIES := \
 	libcutils \
@@ -51,7 +60,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
         librga \
         libmpp \
-        libskia 
+        libskia \
+        libcfa
 
 LOCAL_STATIC_LIBRARIES := \
 	libtinyxml2

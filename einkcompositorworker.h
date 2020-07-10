@@ -188,6 +188,8 @@ class EinkCompositorWorker : public Worker {
   int rgaBuffer_index = 0;
   DrmRgaBuffer rgaBuffers[MaxRgaBuffers];
   int *gray16_buffer = NULL;
+  int *rgba_new_buffer = NULL;
+  int *gray256_new_buffer = NULL;
   char* rga_output_addr = NULL;
 
 };

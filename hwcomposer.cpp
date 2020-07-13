@@ -158,6 +158,8 @@ struct ebc_buf_info{
   int win_x2;
   int win_y2;
   int rotate;
+  int width_mm;
+  int height_mm;
 }__packed;
 struct win_coordinate{
 	int x1;
@@ -5930,8 +5932,8 @@ static int hwc_get_display_attributes(struct hwc_composer_device_1 *dev,
   UN_USED(display);
   UN_USED(dev);
 
-  uint32_t mm_width = 0;
-  uint32_t mm_height = 0;
+  uint32_t mm_width = ebc_buf_info.width_mm;
+  uint32_t mm_height = ebc_buf_info.height_mm;
   int w = hwc_info.framebuffer_width;
   int h = hwc_info.framebuffer_height;
   int vrefresh = hwc_info.vrefresh;

@@ -4783,6 +4783,9 @@ void drawLogoPic(const char src_path[], void* buf, int width, int height)
 {
     ALOGD(" in drawLogoPic begin");
     SkBitmap bitmap;
+    int x = 0;
+    int y = 0;
+
     if (!decode_image_file(src_path, &bitmap)) {
         ALOGE("drawLogoPic decode_image_file error path:%s", src_path);
         return;
@@ -4796,16 +4799,13 @@ void drawLogoPic(const char src_path[], void* buf, int width, int height)
     SkCanvas canvas(dst);
     canvas.drawColor(SK_ColorWHITE);
 
-    SkIRect srcRect;
-    srcRect.set(0, 0, bitmap.width(), bitmap.height());
-    SkRect dstRect;
-    dstRect.iset(0, 0, width, height);
+    if (width > bitmap.width())
+		x = (width - bitmap.width()) / 2;
 
-    //canvas.rotate(-90);
-    //canvas.translate(-height,0);
-    canvas.drawBitmap(bitmap,0, 0, NULL);
-    //canvas.translate(-height,0);
-    //canvas.rotate(-90);
+    if (height > bitmap.height())
+		y = (height - bitmap.height()) / 2;
+
+    canvas.drawBitmap(bitmap, x, y, NULL);
 }
 
 static void inputJpgLogo(const char src_path[],void *dst, int w, int h, int color)
@@ -4931,7 +4931,10 @@ int hwc_post_epd_logo(const char src_path[]) {
     //EPD post
     gCurrentEpdMode = EPD_BLOCK;
     Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-    hwc_post_epd(gray16_buffer, rect, EPD_BLOCK);
+    if (gPowerMode == EPD_POWEROFF)
+    	hwc_post_epd(gray16_buffer, rect, EPD_UNBLOCK);
+    else
+    	hwc_post_epd(gray16_buffer, rect, EPD_BLOCK);
     gCurrentEpdMode = EPD_BLOCK;
 
     free(image_addr);

@@ -5712,8 +5712,10 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       break;
     case HWC_POWER_MODE_DOZE_SUSPEND:
     case HWC_POWER_MODE_NORMAL:
-      gPowerMode = EPD_UNBLOCK;
-      gCurrentEpdMode = EPD_FULL;
+      if (gPowerMode != EPD_POWEROFF) {
+          gPowerMode = EPD_UNBLOCK;
+          gCurrentEpdMode = EPD_FULL;
+      }
       not_fullmode_count = 50;
       break;
   }

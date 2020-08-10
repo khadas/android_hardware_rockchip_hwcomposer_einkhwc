@@ -4931,10 +4931,7 @@ int hwc_post_epd_logo(const char src_path[]) {
     //EPD post
     gCurrentEpdMode = EPD_BLOCK;
     Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-    if (gPowerMode == EPD_POWEROFF)
-    	hwc_post_epd(gray16_buffer, rect, EPD_UNBLOCK);
-    else
-    	hwc_post_epd(gray16_buffer, rect, EPD_BLOCK);
+    hwc_post_epd(gray16_buffer, rect, EPD_BLOCK);
     gCurrentEpdMode = EPD_BLOCK;
 
     free(image_addr);

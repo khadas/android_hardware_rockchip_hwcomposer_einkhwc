@@ -435,6 +435,84 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     return ret;
 }
 
+#if RK356X
+int EinkCompositorWorker::Rgba888ToGray16(int *output_buffer,const buffer_handle_t          &fb_handle) {
+    ATRACE_CALL();
+    int ret = 0;
+    int rga_transform = 0;
+    int src_l,src_t,src_w,src_h;
+    int dst_l,dst_t,dst_r,dst_b;
+
+    int dst_w,dst_h,dst_stride;
+    int src_buf_w,src_buf_h,src_buf_stride,src_buf_format;
+    rga_info_t src, dst;
+    memset(&src, 0, sizeof(rga_info_t));
+    memset(&dst, 0, sizeof(rga_info_t));
+    src.fd = -1;
+    dst.fd = -1;
+
+#if (!RK_PER_MODE && RK_DRM_GRALLOC)
+    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
+#else
+    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
+    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
+    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
+#endif
+
+    src_l = 0;
+    src_t = 0;
+    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+
+
+    dst_l = 0;
+    dst_t = 0;
+    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+
+
+    if(dst_w < 0 || dst_h <0 )
+      ALOGE("RGA invalid dst_w=%d,dst_h=%d",dst_w,dst_h);
+
+    src.sync_mode = RGA_BLIT_SYNC;
+    rga_set_rect(&src.rect,
+                src_l, src_t, src_w, src_h,
+                src_buf_stride, src_buf_h, src_buf_format);
+    rga_set_rect(&dst.rect, dst_l, dst_t,  dst_w, dst_h, dst_w, dst_h, RK_FORMAT_Y4);
+
+    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+        src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+        dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale : src hnd=%p,dst hnd=%p, format=0x%x, transform=0x%x\n",
+        (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle), HAL_PIXEL_FORMAT_RGBA_8888, rga_transform);
+
+    src.hnd = fb_handle;
+    dst.virAddr = output_buffer;
+    src.rotation = rga_transform;
+
+		dst.dither.enable = 1;
+		dst.dither.mode = 0;
+
+    RockchipRga& rkRga(RockchipRga::get());
+    ret = rkRga.RkRgaBlit(&src, &dst, NULL);
+    if(ret) {
+        ALOGE("rgaRotateScale error : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+            src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+            dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+        ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
+            strerror(errno), (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle));
+    }
+    DumpLayer("yuv", dst.hnd);
+
+
+    return ret;
+}
+
+#endif
 int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle) {
     ATRACE_CALL();
     int ret = 0;
@@ -812,6 +890,16 @@ int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
 
+#if RK356X
+
+  int ret = Rgba888ToGray16(gray16_buffer, fb_handle);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+  return 0;
+#else
+
   char *gray256_addr = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
   framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
@@ -850,6 +938,9 @@ int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
     gralloc_->unlock(gralloc_, src_hnd);
     rga_output_addr = NULL;
   }
+
+
+#endif
   return 0;
 }
 

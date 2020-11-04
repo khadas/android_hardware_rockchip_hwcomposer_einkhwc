@@ -155,6 +155,9 @@ class EinkCompositorWorker : public Worker {
   int FinishComposition(int timeline);
   int Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
+#if RK356X
+  int Rgba888ToGray16(int *output_buffer,const buffer_handle_t          &fb_handle);
+#endif
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int ConvertToColorEink1(const buffer_handle_t &fb_handle);
   int ConvertToColorEink2(const buffer_handle_t &fb_handle);

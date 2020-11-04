@@ -4696,7 +4696,7 @@ send_one_buffer:
           int*temp_gray;
           temp_rgb = (int*)(framebuffer_base);
           temp_gray = (int*)gray16_buffer;
-          //image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(new_buffer));  
+          //image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(new_buffer));
           //neon_rgb888_to_gray16ARM((uint8_t *)gray16_buffer, (uint8_t *)(new_buffer),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
           Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
       }
@@ -5167,7 +5167,6 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
                    hwc_display_contents_1_t **sf_display_contents) {
   ATRACE_CALL();
   Mutex::Autolock lock(mEinkModeLock);
-  long t0 = __currentTime();
 
   struct hwc_context_t *ctx = (struct hwc_context_t *)&dev->common;
   int ret = 0;
@@ -5177,82 +5176,29 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   Region updateRegion;
   Region currentA2Region;
   Region currentAutoRegion;
-  int requestEpdMode;
-  Rect postRect = Rect(0, 0, ebc_buf_info.vir_width, ebc_buf_info.vir_height);
 
-  //Get EinkInfo from ashmem.
-  for (size_t i = 0; i < num_displays; ++i) {
-      hwc_display_contents_1_t *dc = sf_display_contents[i];
-
-  if (!sf_display_contents[i])
-    continue;
-
-    size_t num_dc_layers = dc->numHwLayers;
-
-    for (size_t j = 0; j < num_dc_layers; ++j) {
-      hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
-      dump_layer(ctx->gralloc, false, sf_layer, j);
-      if (sf_layer != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
-
-        long t3 = __currentTime();
-        struct rk_ashmem_eink_t rk_ashmem_eink;
-
-        hwc_get_handle_EinkInfo(ctx->gralloc,sf_layer->handle,&rk_ashmem_eink);
-        ALOGD_IF(log_level(DBG_DEBUG),"Get einkMode = %d ",rk_ashmem_eink.mEinkMode);
-
-        requestEpdMode = rk_ashmem_eink.mEinkMode;
-        unflattenRegion(rk_ashmem_eink.mA2Region,currentA2Region);
-        unflattenRegion(rk_ashmem_eink.mUpdateRegion,updateRegion);
-        unflattenRegion(rk_ashmem_eink.mAutoRegion,currentAutoRegion);
-
-        if(log_level(DBG_DEBUG)){
-          currentA2Region.dump("HWC unflattenRegion currentA2Region");
-          updateRegion.dump("HWC unflattenRegion updateRegion");
-          currentAutoRegion.dump("HWC unflattenRegion currentAutoRegion");
-          ALOGD("DEBUG_lb currentA2Region.isEmpty = %d , updateRegion.isEmpty = %d",currentA2Region.isEmpty(),updateRegion.isEmpty());
-        }
-        //If currentA2Region and updateRegion is empty, skip this frame.
-        if(currentA2Region.isEmpty() && updateRegion.isEmpty())
-        {
-            requestEpdMode = EPD_BLOCK;
-
-        }
-        long t4 = __currentTime();
-        ALOGD_IF(log_level(DBG_DEBUG),"%s:line = %d get EinkInfo from ashmem cost_time=%ld us",__FUNCTION__,__LINE__, t4 - t3);
-      }
-    }
-  }
-
+  property_get("sys.eink.mode", value, "0");
+  int requestEpdMode = atoi(value);
   //Handle eink mode.
   ret = hwc_handle_eink_mode(requestEpdMode);
 
-  property_get("debug.property.enable", value, "0");
-  if(atoi(value) > 0){
-      property_get("debug.mode", value, "0");
-
-      if (gCurrentEpdMode != EPD_UNBLOCK)
-          gCurrentEpdMode = atoi(value);
-
-      if(gCurrentEpdMode == EPD_A2){
-	   if (ebc_buf_info.color_panel == 2) {
-            Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
-            currentAutoRegion.orSelf(screenRegion);
+  if(gCurrentEpdMode == EPD_A2){
+    if (ebc_buf_info.color_panel == 2) {
+      Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
+      currentAutoRegion.orSelf(screenRegion);
+    } else {
+      Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+      currentA2Region.orSelf(screenRegion);
 	   }
-	   else {
-            Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-            currentA2Region.orSelf(screenRegion);
-	   }
-      }
-      if(gCurrentEpdMode == EPD_AUTO){
-	   if (ebc_buf_info.color_panel == 2) {
-            Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
-            currentAutoRegion.orSelf(screenRegion);
-	   }
-	   else {
-            Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-            currentAutoRegion.orSelf(screenRegion);
-	   }
-      }
+  }
+  if(gCurrentEpdMode == EPD_AUTO){
+    if (ebc_buf_info.color_panel == 2) {
+      Region screenRegion(Rect(0, 0, ebc_buf_info.width/2, ebc_buf_info.height/2));
+      currentAutoRegion.orSelf(screenRegion);
+    } else {
+      Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
+      currentAutoRegion.orSelf(screenRegion);
+    }
   }
 
   if(gCurrentEpdMode != EPD_BLOCK){
@@ -5268,7 +5214,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
         hwc_layer_1_t *sf_layer = &dc->hwLayers[j];
         if (sf_layer != NULL && sf_layer->handle != NULL && sf_layer->compositionType == HWC_FRAMEBUFFER_TARGET) {
           char value[PROPERTY_VALUE_MAX];
-          property_get("debug.enable.worker", value, "1");
+          property_get("vendor.eink.worker", value, "1");
           if(atoi(value) == 1)
             ctx->eink_compositor_worker.QueueComposite(dc,currentA2Region,updateRegion,currentAutoRegion,gCurrentEpdMode,gResetEpdMode);
           else if(atoi(value) == 0){
@@ -5306,8 +5252,6 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
       }
     }
   }
-  long t2 = __currentTime();
-  ALOGD_IF(log_level(DBG_DEBUG),"%s:line = %d, send frame = %d cost_time=%ld us",__FUNCTION__,__LINE__, get_frame(),t2 - t0);
   return 0;
 #if 0
   std::vector<CheckedOutputFd> checked_output_fences;

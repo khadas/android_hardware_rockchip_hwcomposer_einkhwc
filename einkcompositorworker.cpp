@@ -100,7 +100,8 @@ EinkCompositorWorker::EinkCompositorWorker()
       timeline_fd_(-1),
       timeline_(0),
       timeline_current_(0),
-      hwc_context(NULL) {
+      hwc_context_(NULL),
+      gralloc_(NULL) {
 }
 
 EinkCompositorWorker::~EinkCompositorWorker() {
@@ -136,13 +137,20 @@ EinkCompositorWorker::~EinkCompositorWorker() {
 }
 
 int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
-  hwc_context = ctx;
+  hwc_context_ = ctx;
   int ret = sw_sync_timeline_create();
   if (ret < 0) {
     ALOGE("Failed to create sw sync timeline %d", ret);
     return ret;
   }
   timeline_fd_ = ret;
+
+  ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
+                    (const hw_module_t **)&gralloc_);
+  if (ret) {
+      ALOGE("Failed to open gralloc module");
+      return ret;
+  }
 
   pthread_cond_init(&eink_queue_cond_, NULL);
 
@@ -364,26 +372,16 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     src.fd = -1;
     dst.fd = -1;
 
-
-    //Get virtual address
-    const gralloc_module_t *gralloc;
-    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                      (const hw_module_t **)&gralloc);
-    if (ret) {
-        ALOGE("Failed to open gralloc module");
-        return ret;
-    }
-
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc,fb_handle);
-    src_buf_h = hwc_get_handle_height(gralloc,fb_handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc,fb_handle);
-    src_buf_format = hwc_get_handle_format(gralloc,fb_handle);
+    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
+    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
+    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
 #endif
 
     src_l = 0;
@@ -452,26 +450,16 @@ int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_
     src.fd = -1;
     dst.fd = -1;
 
-
-    //Get virtual address
-    const gralloc_module_t *gralloc;
-    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                      (const hw_module_t **)&gralloc);
-    if (ret) {
-        ALOGE("Failed to open gralloc module");
-        return ret;
-    }
-
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc,fb_handle);
-    src_buf_h = hwc_get_handle_height(gralloc,fb_handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc,fb_handle);
-    src_buf_format = hwc_get_handle_format(gralloc,fb_handle);
+    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
+    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
+    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
 #endif
 
     src_l = 0;
@@ -539,25 +527,16 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
     src.fd = -1;
     dst.fd = -1;
 
-    //Get virtual address
-    const gralloc_module_t *gralloc;
-    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                      (const hw_module_t **)&gralloc);
-    if (ret) {
-        ALOGE("Failed to open gralloc module");
-        return ret;
-    }
-
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc,fb_handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc,fb_handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc,fb_handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc,fb_handle);
-    src_buf_h = hwc_get_handle_height(gralloc,fb_handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc,fb_handle);
-    src_buf_format = hwc_get_handle_format(gralloc,fb_handle);
+    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
+    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
+    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
+    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
 #endif
 
     src_l = 0;
@@ -602,7 +581,6 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
             strerror(errno), (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle));
     }
     DumpLayer("yuv", dst.hnd);
-
 
     return ret;
 }
@@ -679,28 +657,23 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, rgaBuffer_index);
 
-
   char value[PROPERTY_VALUE_MAX];
 
   DumpLayer("rgba", fb_handle);
 
   char *gray256_addr = NULL;
 
-
-#if USE_RGA
   char* framebuffer_base = NULL;
   int framebuffer_wdith, framebuffer_height, output_format;
   if (ebc_buf_info.color_panel == 0) {
     framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
     framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
     output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
-  }
-  else if (ebc_buf_info.color_panel == 1) {
+  } else if (ebc_buf_info.color_panel == 1) {
     framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
     framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
     output_format = HAL_PIXEL_FORMAT_RGBA_8888;
-  }
-  else if (ebc_buf_info.color_panel == 2) {
+  } else if (ebc_buf_info.color_panel == 2) {
     framebuffer_wdith = ebc_buf_info.fb_width/2;
     framebuffer_height = ebc_buf_info.fb_height/2;
     output_format = HAL_PIXEL_FORMAT_RGBA_8888;
@@ -712,28 +685,19 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
     return -ENOMEM;
   }
 
-  //Get virtual address
-  const gralloc_module_t *gralloc;
-  ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                    (const hw_module_t **)&gralloc);
-  if (ret) {
-      ALOGE("Failed to open gralloc module");
-      return ret;
-  }
-
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
 
-  width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
+  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
 
   int enable_kymix = 0;
   if (ebc_buf_info.color_panel == 0) {
-    gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+    gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&rga_output_addr);
 
     property_get("sys.sf.kymix", value, "0");
@@ -753,9 +717,8 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
       }
       gray256_addr = rga_output_addr;
     }
-  }
-  else {
-    gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+  }else {
+    gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&framebuffer_base);
 
     ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
@@ -764,47 +727,6 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Re
       return ret;
     }
   }
-#else
-
-    char* framebuffer_base = NULL;
-    DrmRgaBuffer &rga_buffer = rgaBuffers[0];
-    if (!rga_buffer.Allocate(ebc_buf_info.fb_width, ebc_buf_info.fb_height, HAL_PIXEL_FORMAT_RGBA_8888)) {
-      ALOGE("Failed to allocate rga buffer with size %dx%d", ebc_buf_info.fb_width, ebc_buf_info.fb_height);
-      return -ENOMEM;
-    }
-
-    //Get virtual address
-    const gralloc_module_t *gralloc;
-    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                      (const hw_module_t **)&gralloc);
-    if (ret) {
-        ALOGE("Failed to open gralloc module");
-        return ret;
-    }
-
-    int width,height,stride,byte_stride,format,size;
-    buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
-
-    width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
-    height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
-    stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
-    byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
-    format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
-    size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
-
-    ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
-    if (ret) {
-      ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
-      return ret;
-    }
-
-    gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
-                    0, 0, width, height, (void **)&framebuffer_base);
-
-//    ALOGD("rk-debug %s,line = %d, w = %d , h = %d , lock ret = %d",__FUNCTION__,__LINE__,ebc_buf_info.width,ebc_buf_info.height,ret);
-//    ALOGD("rk-debug %s,line = %d, framebuffer w = %d , h = %d , format =  %d",__FUNCTION__,__LINE__,width,height,format);
-//    ALOGD("rk-debug %s,line = %d, framebuffer base = %p ",__FUNCTION__,__LINE__,framebuffer_base);
-#endif
 
 send_one_buffer:
 
@@ -815,60 +737,25 @@ send_one_buffer:
 
 	if(epdMode == EPD_NULL){
     gray256_addr = NULL;
-#if USE_RGA
-      if(rga_output_addr != NULL){
-        //Get virtual address
-        const gralloc_module_t *gralloc;
-        int ret = 0;
-        ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                          (const hw_module_t **)&gralloc);
-        if (ret) {
-            ALOGE("Failed to open gralloc module");
-            return ret;
-        }
-        DrmRgaBuffer &gra_buffer = rgaBuffers[0];
-        buffer_handle_t src_hnd = gra_buffer.buffer()->handle;
-        gralloc->unlock(gralloc, src_hnd);
-        rga_output_addr = NULL;
-      }
+    if(rga_output_addr != NULL){
+      DrmRgaBuffer &gra_buffer = rgaBuffers[0];
+      buffer_handle_t src_hnd = gra_buffer.buffer()->handle;
+      gralloc_->unlock(gralloc_, src_hnd);
+      rga_output_addr = NULL;
+    }
 
-      if(framebuffer_base != NULL){
-          const gralloc_module_t *gralloc;
-          ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                            (const hw_module_t **)&gralloc);
-          if (ret) {
-              ALOGE("Failed to open gralloc module");
-              return ret;
-          }
-          gralloc->unlock(gralloc, src_hnd);
-          framebuffer_base = NULL;
-      }
-#else
-
-      if(framebuffer_base != NULL){
-          const gralloc_module_t *gralloc;
-          ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                            (const hw_module_t **)&gralloc);
-          if (ret) {
-              ALOGE("Failed to open gralloc module");
-              return ret;
-          }
-          gralloc->unlock(gralloc, src_hnd);
-          framebuffer_base = NULL;
-      }
-#endif
-
+    if(framebuffer_base != NULL){
+        gralloc_->unlock(gralloc_, src_hnd);
+        framebuffer_base = NULL;
+    }
     return 0;
 	}
 
-  if((epdMode == EPD_FULL) || (epdMode == EPD_BLOCK) || (epdMode == EPD_UNBLOCK))
-  {
+  if((epdMode == EPD_FULL) || (epdMode == EPD_BLOCK) || (epdMode == EPD_UNBLOCK)){
       A2Region.clear();
       gLastA2Region.clear();
       gSavedUpdateRegion.clear();
-  }
-  else if(epdMode == EPD_A2)
-  {
+  }else if(epdMode == EPD_A2){
       epdMode = EPD_PART;
   }
 
@@ -880,26 +767,19 @@ send_one_buffer:
 
   int *gray16_buffer_bak = gray16_buffer;
 
-#if USE_RGA
   if (ebc_buf_info.color_panel == 1) {
-    //Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),
-	//	height - (height%2),width-(width%8),ebc_buf_info.vir_width);
     image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(rgba_new_buffer));
     if (epdMode != EPD_A2) {
         neon_rgb888_to_gray16ARM((uint8_t *)gray16_buffer, (uint8_t *)(rgba_new_buffer),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
-    }
-    else {
+    } else {
         neon_rgb888_to_gray256ARM((uint8_t *)gray256_new_buffer, (uint8_t *)(rgba_new_buffer), ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
         gray256_addr = (char *)gray256_new_buffer;
     }
-  }
-  else if (ebc_buf_info.color_panel == 2) {
+  } else if (ebc_buf_info.color_panel == 2) {
     Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),
 		height,width,ebc_buf_info.vir_width);
-  }
-  else if(enable_kymix == 0) {
-    if (epdMode != EPD_A2)
-    {
+  } else if(enable_kymix == 0) {
+    if (epdMode != EPD_A2){
       if(epdMode == EPD_FULL_DITHER){
         gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
       }else{
@@ -930,8 +810,7 @@ send_one_buffer:
       case EPD_A2:
           if (ebc_buf_info.color_panel == 2) {
               epdMode = EPD_PART;
-          }
-          else {
+          } else {
               Region screenRegion(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
               if (A2Region.isEmpty()) {
                   //ALOGE("quit A2");
@@ -960,158 +839,9 @@ send_one_buffer:
           break;
 
   }
-
-#else
-  //convent all to gray 16.
-  //color_panel   : 0 RGA + Neon = 黑白屏
-  //              : 1 彩屏 - CPU
-  if (epdMode != EPD_A2)
-  {
-      if(ebc_buf_info.color_panel == 1)
-      {
-      int i;
-      int *temp_rgb;
-      int*temp_gray;
-      temp_rgb = (int*)(framebuffer_base);
-      temp_gray = (int*)gray16_buffer;
-          Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.vir_width);
-      }
-      else if(gPixel_format==8) {
-          if (epdMode == EPD_FULL_DITHER)
-          {
-              Luma8bit_to_4bit_dither((int*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.vir_height,ebc_buf_info.vir_width,width);
-          }
-          else
-          {
-              Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(framebuffer_base),ebc_buf_info.vir_height,ebc_buf_info.vir_width,width);
-          }
-      }
-      else
-      {
-          if (epdMode == EPD_FULL_DITHER)
-          {
-              rgb888_to_gray16_dither((int*)gray16_buffer,(uint8_t*)(framebuffer_base), height, width, ebc_buf_info.vir_width);
-          }
-          else
-          {
-              neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(framebuffer_base), height, width, ebc_buf_info.vir_width);
-      }
-      }
-  }
-
-  switch(epdMode){
-        case EPD_FULL:
-        case EPD_FULL_WIN:
-        case EPD_FULL_DITHER:
-        case EPD_AUTO:
-        case EPD_FULL_GL16:
-        case EPD_FULL_GLR16:
-        case EPD_FULL_GLD16:
-            //LOGE("jeffy FULL");
-            not_fullmode_count = 0;
-            break;
-        case EPD_A2:
-            if (ebc_buf_info.color_panel == 2) {
-                epdMode = EPD_PART;
-            }
-            else {
-                Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-                if(log_level(DBG_DEBUG))
-                    screenRegion.dump("fremebuffer1 screenRegion");
-                if (screenRegion.subtract(A2Region).isEmpty() &&
-                        screenRegion.subtract(gLastA2Region).isEmpty()) {
-                    //all screen region was in a2 mode.
-                    if(log_level(DBG_DEBUG))
-                        screenRegion.dump("fremebuffer subtract screenRegion");
-                    rgb888_to_gray2_dither((uint8_t*)gray16_buffer,
-                                    (uint8_t*)framebuffer_base, ebc_buf_info.vir_height,
-                                    ebc_buf_info.width, ebc_buf_info.vir_width, screenRegion);
-                    break;
-                }
-                //window a2.
-                uint8_t *gray_256;
-			          gray_256 = (uint8_t*)malloc(ebc_buf_info.height * ebc_buf_info.width);
-                neon_rgb888_to_gray256ARM((uint8_t*)gray_256,
-                            (uint8_t*)framebuffer_base,
-                            ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-                Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray_256),
-                                  ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
-                if (A2Region.isEmpty()) {
-                   // ALOGE("jeffy quit A2");
-                    //get out a2 mode.
-                    //1.reset updated region to white.
-                    updateRegion.orSelf(gLastA2Region);
-                    updateRegion.orSelf(gSavedUpdateRegion);
-                    gLastA2Region.clear();
-                    gSavedUpdateRegion.clear();
-                    apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.width, updateRegion,&ebc_buf_info);
-
-                    //2.paint updated region.
-                    epdMode = EPD_A2;//EPD_BLACK_WHITE;//
-                    PostEink(gray16_buffer, postRect, epdMode);
-
-                    //3.will repaint those regions in full mode.
-                    gCurrentEpdMode = EPD_FULL_WIN;
-                    Rect rect = updateRegion.getBounds();
-                    postRect = rect;
-                    free(gray_256);
-                    goto    send_one_buffer;
-                }
-
-                Region newA2Region = A2Region - gSavedUpdateRegion - gLastA2Region;
-                Region newUpdateRegion = updateRegion - gSavedUpdateRegion - gLastA2Region;
-
-                if(log_level(DBG_DEBUG)){
-                    newA2Region.dump("fremebuffer1 newA2Region");
-                    newUpdateRegion.dump("fremebuffer1 newUpdateRegion");
-                    A2Region.dump("fremebuffer1 currentA2Region");
-                }
-
-                //update saved region info.
-                gSavedUpdateRegion.orSelf(gLastA2Region);
-                gSavedUpdateRegion.orSelf(updateRegion);
-                gLastA2Region = A2Region;
-                gray256_to_gray2_dither((char *)gray_256,
-                        (char *)gray16_buffer, ebc_buf_info.vir_height,
-                        ebc_buf_info.width, ebc_buf_info.vir_width,
-                        gSavedUpdateRegion);
-                if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
-                    //has new region.
-                    if(log_level(DBG_DEBUG)){
-                        newA2Region.dump("fremebuffer2 newA2Region");
-                        newUpdateRegion.dump("fremebuffer2 newUpdateRegion");
-                    }
-                    //1.reset new region to white, and paint them.
-                    apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
-                            ebc_buf_info.vir_width, newUpdateRegion | newA2Region,&ebc_buf_info);
-                    epdMode = EPD_BLACK_WHITE;
-                    PostEink(gray16_buffer, postRect, epdMode);
-                    //2.will repaint those regions in a2 mode.
-                    free(gray_256);
-                    goto    send_one_buffer;
-                }
-                //not_fullmode_count++;
-                break;
-            }
-        case EPD_BLOCK:
-           // release_wake_lock("show_advt_lock");
-        default:
-            //LOGE("jeffy part:%d", epdMode);
-            not_fullmode_count++;
-            break;
-
-    }
-#endif
-
-
   char pro_value[PROPERTY_VALUE_MAX];
   property_get("persist.vendor.fullmode_cnt",pro_value,"500");
 
-
-  //if(not_fullmode_count > atoi(pro_value)){
-  //    epdMode = EPD_FULL;
-  //    not_fullmode_count = 0;
-  //}
   not_fullmode_num = atoi(pro_value);
   if (not_fullmode_num != curr_not_fullmode_num) {
     if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
@@ -1124,49 +854,16 @@ send_one_buffer:
 
   ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> end post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());
 
-#if USE_RGA
   if(rga_output_addr != NULL){
-    //Get virtual address
-    const gralloc_module_t *gralloc;
-    int ret = 0;
-    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                      (const hw_module_t **)&gralloc);
-    if (ret) {
-        ALOGE("Failed to open gralloc module");
-        return ret;
-    }
     DrmRgaBuffer &gra_buffer = rgaBuffers[0];
     buffer_handle_t src_hnd = gra_buffer.buffer()->handle;
-    gralloc->unlock(gralloc, src_hnd);
+    gralloc_->unlock(gralloc_, src_hnd);
     rga_output_addr = NULL;
   }
   if(framebuffer_base != NULL){
-      const gralloc_module_t *gralloc;
-      ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                        (const hw_module_t **)&gralloc);
-      if (ret) {
-          ALOGE("Failed to open gralloc module");
-          return ret;
-      }
-      gralloc->unlock(gralloc, src_hnd);
+      gralloc_->unlock(gralloc_, src_hnd);
       framebuffer_base = NULL;
   }
-
-#else
-
-  if(framebuffer_base != NULL){
-      const gralloc_module_t *gralloc;
-      ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                        (const hw_module_t **)&gralloc);
-      if (ret) {
-          ALOGE("Failed to open gralloc module");
-          return ret;
-      }
-      gralloc->unlock(gralloc, src_hnd);
-      framebuffer_base = NULL;
-  }
-#endif
-
   gray16_buffer_bak = NULL;
   return 0;
 }

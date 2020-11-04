@@ -647,6 +647,115 @@ static int not_fullmode_count = 0;
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
 
+int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
+
+  ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
+
+  char *gray256_addr = NULL;
+
+  char* framebuffer_base = NULL;
+  int framebuffer_wdith, framebuffer_height, output_format, ret;
+  if (ebc_buf_info.color_panel == 1) {
+    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
+  } else if (ebc_buf_info.color_panel == 2) {
+    framebuffer_wdith = ebc_buf_info.fb_width / 2;
+    framebuffer_height = ebc_buf_info.fb_height / 2;
+    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
+  }
+
+  DumpLayer("rgba", fb_handle);
+
+  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
+    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
+    return -ENOMEM;
+  }
+
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
+
+  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+
+  ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+
+  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                0, 0, width, height, (void **)&framebuffer_base);
+
+  Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.vir_width);
+
+  if(rga_output_addr != NULL){
+    gralloc_->unlock(gralloc_, src_hnd);
+    rga_output_addr = NULL;
+  }
+
+  return 0;
+}
+int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
+
+  ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
+
+  char *gray256_addr = NULL;
+
+  char* framebuffer_base = NULL;
+  int framebuffer_wdith, framebuffer_height, output_format, ret;
+  if (ebc_buf_info.color_panel == 1) {
+    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
+  } else if (ebc_buf_info.color_panel == 2) {
+    framebuffer_wdith = ebc_buf_info.fb_width / 2;
+    framebuffer_height = ebc_buf_info.fb_height / 2;
+    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
+  }
+
+  DumpLayer("rgba", fb_handle);
+
+  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
+    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
+    return -ENOMEM;
+  }
+
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
+
+  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+
+  ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+
+  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                0, 0, width, height, (void **)&framebuffer_base);
+
+  image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(rgba_new_buffer));
+  neon_rgb888_to_gray16ARM((uint8_t *)gray16_buffer, (uint8_t *)(rgba_new_buffer),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
+
+  if(rga_output_addr != NULL){
+    gralloc_->unlock(gralloc_, src_hnd);
+    rga_output_addr = NULL;
+  }
+  return 0;
+}
+
 int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
 
   DumpLayer("rgba", fb_handle);
@@ -787,6 +896,13 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
   }
   return 0;
 }
+int EinkCompositorWorker::ColorCommit(int epd_mode) {
+  Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+  int *gray16_buffer_bak = gray16_buffer;
+  PostEink(gray16_buffer_bak, screen_rect, epd_mode);
+  gLastEpdMode = epd_mode;
+  return 0;
+}
 
 int EinkCompositorWorker::Y4Commit(int epd_mode) {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
@@ -794,7 +910,6 @@ int EinkCompositorWorker::Y4Commit(int epd_mode) {
   PostEink(gray16_buffer_bak, screen_rect, epd_mode);
   gLastEpdMode = epd_mode;
   return 0;
-
 }
 int EinkCompositorWorker::A2Commit() {
   int epd_mode = EPD_NULL;
@@ -808,7 +923,6 @@ int EinkCompositorWorker::A2Commit() {
   PostEink(gray16_buffer_bak, screen_rect, epd_mode);
   gLastEpdMode = EPD_A2;
   return 0;
-
 }
 
 int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
@@ -818,7 +932,6 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
     ALOGE("%s,line=%d fb_handle is null",__FUNCTION__,__LINE__);
     return -1;
   }
-  int ret = 0;
 
   switch(gCurrentEpdMode){
     case EPD_FULL:
@@ -849,6 +962,16 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
 //    case EPD_PART_EINK:
 //      ConvertToY8(fb_handle);
 //      EinkCommit();
+//    case EPD_COLOR_EINK1:
+//      ConvertToColorEink1(fb_handle);
+//      ColorCommit(gCurrentEpdMode);
+//      not_fullmode_count++;
+//      break;
+//    case EPD_COLOR_EINK1:
+//      ConvertToColorEink2(fb_handle);
+//      ColorCommit(gCurrentEpdMode);
+//      not_fullmode_count++;
+//      break;
     default:
       //LOGE("jeffy part:%d", epdMode);
       not_fullmode_count++;
@@ -867,168 +990,7 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
     curr_not_fullmode_num = not_fullmode_num;
   }
 
-
   return 0;
-#if 1
-  char *gray256_addr = NULL;
-
-  char* framebuffer_base = NULL;
-  int framebuffer_wdith, framebuffer_height, output_format;
-  if (ebc_buf_info.color_panel == 0) {
-    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
-    output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
-  } else if (ebc_buf_info.color_panel == 1) {
-    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
-    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
-  } else if (ebc_buf_info.color_panel == 2) {
-    framebuffer_wdith = ebc_buf_info.fb_width/2;
-    framebuffer_height = ebc_buf_info.fb_height/2;
-    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
-  }
-
-  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
-  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
-    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
-    return -ENOMEM;
-  }
-
-  int width,height,stride,byte_stride,format,size;
-  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
-
-  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
-
-  int enable_kymix = 0;
-  if (ebc_buf_info.color_panel == 0) {
-    gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
-                  0, 0, width, height, (void **)&rga_output_addr);
-
-    property_get("sys.sf.kymix", value, "0");
-    enable_kymix = atoi(value);
-    if (enable_kymix > 0) {
-      ret = RgaClipGrayRect(rga_buffer, fb_handle);
-      if (ret) {
-        ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
-        return ret;
-      }
-      gray16_buffer = (int *)rga_output_addr;
-    } else {
-      ret = Rgba888ToGray256(rga_buffer, fb_handle);
-      if (ret) {
-        ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
-        return ret;
-      }
-      gray256_addr = rga_output_addr;
-    }
-  }else {
-    gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
-                  0, 0, width, height, (void **)&framebuffer_base);
-
-    ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
-    if (ret) {
-      ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
-      return ret;
-    }
-  }
-
-send_one_buffer:
-
-  ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> begin post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());
-  //reset mode to default.
-  int epdMode = gCurrentEpdMode;
-  gCurrentEpdMode = gResetEpdMode;
-
-	if(epdMode == EPD_NULL){
-    gray256_addr = NULL;
-    if(rga_output_addr != NULL){
-      DrmRgaBuffer &gra_buffer = rgaBuffers[0];
-      buffer_handle_t src_hnd = gra_buffer.buffer()->handle;
-      gralloc_->unlock(gralloc_, src_hnd);
-      rga_output_addr = NULL;
-    }
-
-    if(framebuffer_base != NULL){
-        gralloc_->unlock(gralloc_, src_hnd);
-        framebuffer_base = NULL;
-    }
-    return 0;
-	}
-
-
-  int *gray16_buffer_bak = gray16_buffer;
-
-  if (ebc_buf_info.color_panel == 1) {
-    image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(rgba_new_buffer));
-    if (epdMode != EPD_A2) {
-        neon_rgb888_to_gray16ARM((uint8_t *)gray16_buffer, (uint8_t *)(rgba_new_buffer),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
-    } else {
-        neon_rgb888_to_gray256ARM((uint8_t *)gray256_new_buffer, (uint8_t *)(rgba_new_buffer), ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
-        gray256_addr = (char *)gray256_new_buffer;
-    }
-  } else if (ebc_buf_info.color_panel == 2) {
-    Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),
-		height,width,ebc_buf_info.vir_width);
-  } else if(enable_kymix == 0) {
-    if (epdMode != EPD_A2){
-      if(epdMode == EPD_FULL_DITHER){
-        gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-      }else{
-        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-#if USE_NENO_TO_Y16
-        if((ebc_buf_info.width % 32) == 0){
-          neon_gray256_to_gray16ARM_32((unsigned int *)gray16_buffer,(unsigned int *)gray256_addr,ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
-        }
-        else if((ebc_buf_info.width % 16) == 0){
-            neon_gray256_to_gray16ARM_16((unsigned int *)gray16_buffer,(unsigned int *)gray256_addr,ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
-        }
-#endif
-      }
-    }
-  }
-
-  switch(epdMode){
-      case EPD_FULL:
-      case EPD_FULL_WIN:
-      case EPD_FULL_DITHER:
-      case EPD_AUTO:
-      case EPD_FULL_GL16:
-      case EPD_FULL_GLR16:
-      case EPD_FULL_GLD16:
-          //LOGE("jeffy FULL");
-          not_fullmode_count = 0;
-          break;
-      case EPD_A2:
-          if (ebc_buf_info.color_panel == 2) {
-              epdMode = EPD_PART;
-          } else {
-              Region screenRegion(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
-              if(gLastA2Region.isEmpty()){
-                  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-                  gLastA2Region = screenRegion;
-                  epdMode = EPD_BLACK_WHITE;
-              }else{
-                  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-                  gLastA2Region = screenRegion;
-              }
-          }
-          break;
-      case EPD_BLOCK:
-         // release_wake_lock("show_advt_lock");
-      default:
-          //LOGE("jeffy part:%d", epdMode);
-          not_fullmode_count++;
-          break;
-
-  }
-
-  return 0;
-#endif
 }
 
 

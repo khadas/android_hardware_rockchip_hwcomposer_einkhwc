@@ -647,6 +647,50 @@ static int not_fullmode_count = 0;
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
 
+int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
+
+  DumpLayer("rgba", fb_handle);
+
+  ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
+
+  char *gray256_addr = NULL;
+  int framebuffer_wdith, framebuffer_height, output_format, ret;
+  framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+  framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+
+  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
+    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
+    return -ENOMEM;
+  }
+
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
+
+  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+
+  ret = Rgba888ToGray256(rga_buffer, fb_handle);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+
+  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                0, 0, width, height, (void **)&rga_output_addr);
+
+  if(rga_output_addr != NULL){
+    gralloc_->unlock(gralloc_, src_hnd);
+    rga_output_addr = NULL;
+  }
+  return 0;
+}
+
 int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
 
   DumpLayer("rgba", fb_handle);
@@ -802,6 +846,9 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
        // release_wake_lock("show_advt_lock");
       not_fullmode_count++;
       break;
+//    case EPD_PART_EINK:
+//      ConvertToY8(fb_handle);
+//      EinkCommit();
     default:
       //LOGE("jeffy part:%d", epdMode);
       not_fullmode_count++;
@@ -822,7 +869,7 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
 
 
   return 0;
-#if 0
+#if 1
   char *gray256_addr = NULL;
 
   char* framebuffer_base = NULL;

@@ -980,6 +980,11 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
        // release_wake_lock("show_advt_lock");
       not_fullmode_count++;
       break;
+    case EPD_UNBLOCK:
+      ConvertToY4Dither(fb_handle);
+      Y4Commit(gCurrentEpdMode);
+      not_fullmode_count = 0;
+      break;
 //    case EPD_PART_EINK:
 //      ConvertToY8(fb_handle);
 //      EinkCommit();

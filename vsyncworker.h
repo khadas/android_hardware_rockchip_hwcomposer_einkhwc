@@ -36,8 +36,6 @@
 
 #ifndef ANDROID_EVENT_WORKER_H_
 #define ANDROID_EVENT_WORKER_H_
-
-#include "drmresources.h"
 #include "worker.h"
 
 #include <map>
@@ -53,7 +51,7 @@ class VSyncWorker : public Worker {
   VSyncWorker();
   ~VSyncWorker() override;
 
-  int Init(DrmResources *drm, int display);
+  int Init(int display);
   int SetProcs(hwc_procs_t const *procs);
 
   int VSyncControl(bool enabled);
@@ -65,7 +63,6 @@ class VSyncWorker : public Worker {
   int64_t GetPhasedVSync(int64_t frame_ns, int64_t current);
   int SyntheticWaitVBlank(int64_t *timestamp);
 
-  DrmResources *drm_;
   hwc_procs_t const *procs_;
 
   int display_;

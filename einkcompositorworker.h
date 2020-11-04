@@ -41,6 +41,7 @@
 #include "worker.h"
 #include "hwc_rockchip.h"
 #include "hwc_debug.h"
+#include "drmframebuffer.h"
 
 //open header
 #include <sys/types.h>
@@ -64,6 +65,8 @@
 #include <Trace.h>
 
 #include <queue>
+
+#define MaxRgaBuffers 2
 
 namespace android {
 
@@ -133,7 +136,7 @@ class EinkCompositorWorker : public Worker {
   ~EinkCompositorWorker() override;
 
   int Init(struct hwc_context_t *ctx);
-  void QueueComposite(hwc_display_contents_1_t *dc, Region &A2Region,Region &updateRegion,Region &AutoRegion,int gCurrentEpdMode,int gResetEpdMode);
+  void QueueComposite(hwc_display_contents_1_t *dc,int gCurrentEpdMode,int gResetEpdMode);
    void SignalComposite();
 
  protected:
@@ -146,9 +149,6 @@ class EinkCompositorWorker : public Worker {
     int release_timeline;
     buffer_handle_t fb_handle = NULL;
     int einkMode;
-    Region currentUpdateRegion;
-    Region currentA2Region;
-    Region currentAutoRegion;
   };
 
   int CreateNextTimelineFence();

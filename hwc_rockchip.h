@@ -40,8 +40,6 @@
 #include <map>
 #include <vector>
 #include "drmhwcomposer.h"
-#include "drmresources.h"
-#include "vsyncworker.h"
 #include "drmframebuffer.h"
 #include <fcntl.h>
 
@@ -133,11 +131,6 @@ enum dw_hdmi_rockchip_color_depth {
 	ROCKCHIP_HDMI_DEPTH_10 = 10,
 };
 
-typedef std::map<int, std::vector<DrmHwcLayer*>> LayerMap;
-typedef LayerMap::iterator LayerMapIter;
-struct hwc_context_t;
-class VSyncWorker;
-
 typedef enum attribute_flag {
     ATT_WIDTH = 0,
     ATT_HEIGHT,
@@ -178,227 +171,17 @@ typedef struct hwc_drm_display {
   struct hwc_context_t *ctx;
   const gralloc_module_t *gralloc;
   int display;
-#if RK_VIDEO_UI_OPT
-  int iUiFd;
-  bool bHideUi;
-#endif
-  bool is10bitVideo;
-  MixMode mixMode;
-  bool isVideo;
-  bool isHdr;
-  bool hasEotfPlane;
-  struct hdr_static_metadata last_hdr_metadata;
-  int colorimetry;
-  int color_format;
-  int color_depth;
   int framebuffer_width;
   int framebuffer_height;
-  int rel_xres;
-  int rel_yres;
-  int v_total;
   int vrefresh;
-  int iPlaneSize;
-  float w_scale;
-  float h_scale;
-  bool active;
-  bool is_3d;
-  bool is_interlaced;
-  Mode3D stereo_mode;
-  HDMI_STAT last_hdmi_status;
-  int display_timeline;
-  int hotplug_timeline;
-  bool bPreferMixDown;
-#if  RK_RGA_PREPARE_ASYNC
-    int rgaBuffer_index;
-    DrmRgaBuffer rgaBuffers[MaxRgaBuffers];
-    bool mUseRga;
-#endif
-    int transform_nv12;
-    int transform_normal;
-#if RK_ROTATE_VIDEO_MODE
-    int original_min_freq;
-    bool bRotateVideoMode;
-#endif
-#if RK_CTS_WORKROUND
-    bool bPerfMode;
-#endif
-
+  int rgaBuffer_index;
+  DrmRgaBuffer rgaBuffers[2];
+  bool mUseRga;
 } hwc_drm_display_t;
-
-/*
- * Base_parameter is used for 3328_8.0  , by libin start.
- */
-#define AUTO_BIT_RESET 0x00
-#define RESOLUTION_AUTO			(1<<0)
-#define COLOR_AUTO				(1<<1)
-#define HDCP1X_EN				(1<<2)
-#define RESOLUTION_WHITE_EN		(1<<3)
-#define SCREEN_LIST_MAX 5
-#define DEFAULT_BRIGHTNESS  50
-#define DEFAULT_CONTRAST  50
-#define DEFAULT_SATURATION  50
-#define DEFAULT_HUE  50
-#define DEFAULT_OVERSCAN_VALUE 100
-
-
-struct drm_display_mode {
-    /* Proposed mode values */
-    int clock;      /* in kHz */
-    int hdisplay;
-    int hsync_start;
-    int hsync_end;
-    int htotal;
-    int vdisplay;
-    int vsync_start;
-    int vsync_end;
-    int vtotal;
-    int vrefresh;
-    int vscan;
-    unsigned int flags;
-    int picture_aspect_ratio;
-};
-
-enum output_format {
-    output_rgb=0,
-    output_ycbcr444=1,
-    output_ycbcr422=2,
-    output_ycbcr420=3,
-    output_ycbcr_high_subsampling=4,  // (YCbCr444 > YCbCr422 > YCbCr420 > RGB)
-    output_ycbcr_low_subsampling=5  , // (RGB > YCbCr420 > YCbCr422 > YCbCr444)
-    invalid_output=6,
-};
-
-enum  output_depth{
-    Automatic=0,
-    depth_24bit=8,
-    depth_30bit=10,
-};
-
-struct overscan {
-    unsigned int maxvalue;
-    unsigned short leftscale;
-    unsigned short rightscale;
-    unsigned short topscale;
-    unsigned short bottomscale;
-};
-
-struct hwc_inital_info{
-    char device[128];
-    unsigned int framebuffer_width;
-    unsigned int framebuffer_height;
-    float fps;
-};
-
-struct bcsh_info {
-    unsigned short brightness;
-    unsigned short contrast;
-    unsigned short saturation;
-    unsigned short hue;
-};
-struct lut_data{
-    uint16_t size;
-    uint16_t lred[1024];
-    uint16_t lgreen[1024];
-    uint16_t lblue[1024];
-};
-struct screen_info {
-	  int type;
-    struct drm_display_mode resolution;// 52 bytes
-    enum output_format  format; // 4 bytes
-    enum output_depth depthc; // 4 bytes
-    unsigned int feature;     //4 bytes
-};
-
-
-struct disp_info {
-	struct screen_info screen_list[SCREEN_LIST_MAX];
-  struct overscan scan;//12 bytes
-	struct hwc_inital_info hwc_info; //140 bytes
-	struct bcsh_info bcsh;
-  unsigned int reserve[128];
-  struct lut_data mlutdata;/*6k+4*/
-};
-
-
-struct file_base_parameter
-{
-    struct disp_info main;
-    struct disp_info aux;
-};
-
-static char const *const device_template[] =
-{
-    "/dev/block/platform/1021c000.dwmmc/by-name/baseparameter",
-    "/dev/block/platform/30020000.dwmmc/by-name/baseparameter",
-    "/dev/block/platform/fe330000.sdhci/by-name/baseparameter",
-    "/dev/block/platform/ff520000.dwmmc/by-name/baseparameter",
-    "/dev/block/platform/ff0f0000.dwmmc/by-name/baseparameter",
-    "/dev/block/rknand_baseparameter",
-    NULL
-};
-
-enum flagBaseParameter
-{
-    BP_UPDATE = 0,
-    BP_RESOLUTION,
-    BP_FB_SIZE,
-    BP_DEVICE,
-    BP_COLOR,
-    BP_BRIGHTNESS,
-    BP_CONTRAST,
-    BP_SATURATION,
-    BP_HUE,
-    BP_OVERSCAN,
-};
-
-const char* hwc_get_baseparameter_file(void);
-
-bool hwc_have_baseparameter(void);
-int  hwc_get_baseparameter_config(char *parameter, int display, int flag, int type);
-void hwc_set_baseparameter_config(DrmResources *drm);
-void hwc_save_BcshConfig(int dpy);
-int hwc_findSuitableInfoSlot(struct disp_info* info, int type);
-
-
-int hwc_parse_format_into_prop(int display,unsigned int format,unsigned int depthc);
-
-
-/*
- * Base_parameter is used for 3328_8.0 , by libin end.
- */
-enum
-{
-    VIDEO_SCALE_FULL_SCALE = 0,
-    VIDEO_SCALE_AUTO_SCALE,
-    VIDEO_SCALE_4_3_SCALE ,
-    VIDEO_SCALE_16_9_SCALE,
-    VIDEO_SCALE_ORIGINAL,
-    VIDEO_SCALE_OVERSCREEN,
-    VIDEO_SCALE_LR_BOX,
-    VIDEO_SCALE_TB_BOX,
-};
-
-bool hwc_video_to_area(DrmHwcRect<float> &source_yuv,DrmHwcRect<int> &display_yuv,int scaleMode);
-
 
 
 int hwc_init_version();
 
-#if USE_AFBC_LAYER
-bool isAfbcInternalFormat(uint64_t internal_format);
-#endif
-#if RK_INVALID_REFRESH
-int init_thread_pamaters(threadPamaters* mThreadPamaters);
-int free_thread_pamaters(threadPamaters* mThreadPamaters);
-int hwc_static_screen_opt_set(bool isGLESComp);
-#endif
-
-#if 1
-int detect_3d_mode(hwc_drm_display_t *hd, hwc_display_contents_1_t *display_content, int display);
-#endif
-#if 0
-int hwc_control_3dmode(int fd_3d, int value, int flag);
-#endif
 float getPixelWidthByAndroidFormat(int format);
 #ifdef USE_HWC2
 int hwc_get_handle_displayStereo(const gralloc_module_t *gralloc, buffer_handle_t hnd);
@@ -422,20 +205,6 @@ int hwc_get_handle_attibute(const gralloc_module_t *gralloc, buffer_handle_t hnd
 int hwc_get_handle_primefd(const gralloc_module_t *gralloc, buffer_handle_t hnd);
 #if RK_DRM_GRALLOC
 uint32_t hwc_get_handle_phy_addr(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-#endif
-uint32_t hwc_get_layer_colorspace(hwc_layer_1_t *layer);
-uint32_t colorspace_convert_to_linux(uint32_t colorspace);
-bool vop_support_format(uint32_t hal_format);
-bool vop_support_scale(hwc_layer_1_t *layer);
-bool GetCrtcSupported(const DrmCrtc &crtc, uint32_t possible_crtc_mask);
-bool match_process(DrmResources* drm, DrmCrtc *crtc, bool is_interlaced,
-                        std::vector<DrmHwcLayer>& layers, int iPlaneSize, int fbSize,
-                        std::vector<DrmCompositionPlane>& composition_planes);
-bool mix_policy(DrmResources* drm, DrmCrtc *crtc, hwc_drm_display_t *hd,
-                std::vector<DrmHwcLayer>& layers, int iPlaneSize, int fbSize,
-                std::vector<DrmCompositionPlane>& composition_planes);
-#if RK_VIDEO_UI_OPT
-void video_ui_optimize(const gralloc_module_t *gralloc, hwc_display_contents_1_t *display_content, hwc_drm_display_t *hd);
 #endif
 void hwc_list_nodraw(hwc_display_contents_1_t  *list);
 void hwc_sync_release(hwc_display_contents_1_t  *list);

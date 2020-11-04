@@ -36,10 +36,9 @@
 
 #define LOG_TAG "hwc-vsync-worker"
 
-#include "drmresources.h"
 #include "vsyncworker.h"
 #include "worker.h"
-
+#include "hwc_debug.h"
 #include <map>
 #include <stdlib.h>
 #include <time.h>
@@ -54,7 +53,6 @@ namespace android {
 
 VSyncWorker::VSyncWorker()
     : Worker("vsync", HAL_PRIORITY_URGENT_DISPLAY),
-      drm_(NULL),
       procs_(NULL),
       display_(-1),
       last_timestamp_(-1) {
@@ -63,10 +61,8 @@ VSyncWorker::VSyncWorker()
 VSyncWorker::~VSyncWorker() {
 }
 
-int VSyncWorker::Init(DrmResources *drm, int display) {
-  drm_ = drm;
+int VSyncWorker::Init(int display) {
   display_ = display;
-
   return InitWorker();
 }
 
@@ -135,11 +131,6 @@ int VSyncWorker::SyntheticWaitVBlank(int64_t *timestamp) {
   int ret = clock_gettime(CLOCK_MONOTONIC, &vsync);
 
   float refresh = 10.0f;  // Default to 60Hz refresh rate
-  DrmConnector *conn = drm_->GetConnectorFromType(display_);
-  if (conn && conn->state() == DRM_MODE_CONNECTED) {
-    if (conn->active_mode().v_refresh() > 0.0f)
-      refresh = conn->active_mode().v_refresh();
-  }
 
   int64_t phased_timestamp = GetPhasedVSync(
       kOneSecondNs / refresh, vsync.tv_sec * kOneSecondNs + vsync.tv_nsec);
@@ -183,40 +174,9 @@ void VSyncWorker::Routine() {
     return;
 
   int64_t timestamp;
-  DrmConnector *conn = drm_->GetConnectorFromType(display);
-  if (!conn) {
-    ALOGE("Failed to get connector for display");
-    return;
-  }
-  DrmCrtc *crtc = NULL;
-  if (conn)
-    crtc = drm_->GetCrtcFromConnector(conn);
-
-  if (!crtc) {
     ret = SyntheticWaitVBlank(&timestamp);
     if (ret)
       return;
-  } else {
-    uint32_t high_crtc = (crtc->pipe() << DRM_VBLANK_HIGH_CRTC_SHIFT);
-
-    drmVBlank vblank;
-    memset(&vblank, 0, sizeof(vblank));
-    vblank.request.type = (drmVBlankSeqType)(
-        DRM_VBLANK_RELATIVE | (high_crtc & DRM_VBLANK_HIGH_CRTC_MASK));
-    vblank.request.sequence = 1;
-
-    ret = drmWaitVBlank(drm_->fd(), &vblank);
-    if (ret == -EINTR) {
-      return;
-    } else if (ret) {
-      ret = SyntheticWaitVBlank(&timestamp);
-      if (ret)
-        return;
-    } else {
-      timestamp = (int64_t)vblank.reply.tval_sec * kOneSecondNs +
-                  (int64_t)vblank.reply.tval_usec * 1000;
-    }
-  }
   /*
    * There's a race here where a change in procs_ will not take effect until
    * the next subsequent requested vsync. This is unavoidable since we can't

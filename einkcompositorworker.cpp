@@ -175,16 +175,13 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
   return InitWorker();
 }
 
-void EinkCompositorWorker::QueueComposite(hwc_display_contents_1_t *dc, Region &A2Region,Region &updateRegion,Region &AutoRegion,int CurrentEpdMode,int ResetEpdMode) {
+void EinkCompositorWorker::QueueComposite(hwc_display_contents_1_t *dc,int CurrentEpdMode,int ResetEpdMode) {
   ATRACE_CALL();
 
   std::unique_ptr<EinkComposition> composition(new EinkComposition);
   gCurrentEpdMode = CurrentEpdMode;
   gResetEpdMode = ResetEpdMode;
   composition->einkMode = -1;
-  composition->currentUpdateRegion.clear();
-  composition->currentA2Region.clear();
-  composition->currentAutoRegion.clear();
   composition->fb_handle = NULL;
 
   composition->outbuf_acquire_fence.Set(dc->outbufAcquireFenceFd);
@@ -203,9 +200,6 @@ void EinkCompositorWorker::QueueComposite(hwc_display_contents_1_t *dc, Region &
     layer->releaseFenceFd = CreateNextTimelineFence();
     composition->fb_handle = layer->handle;
     composition->einkMode = CurrentEpdMode;
-    composition->currentUpdateRegion.orSelf(updateRegion);
-    composition->currentA2Region.orSelf(A2Region);
-    composition->currentAutoRegion.orSelf(AutoRegion);
 
     composition->release_timeline = timeline_;
 

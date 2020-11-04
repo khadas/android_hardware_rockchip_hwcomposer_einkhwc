@@ -84,26 +84,8 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_SRC_FILES := \
 	autolock.cpp \
-	drmresources.cpp \
-	drmcomposition.cpp \
-	drmcompositor.cpp \
-	drmcompositorworker.cpp \
-	drmconnector.cpp \
-	drmcrtc.cpp \
-	drmdisplaycomposition.cpp \
-	drmdisplaycompositor.cpp \
-	drmencoder.cpp \
-	drmeventlistener.cpp \
-	drmmode.cpp \
-	drmplane.cpp \
-	drmproperty.cpp \
-	glworker.cpp \
 	hwcomposer.cpp \
-        platform.cpp \
-        platformdrmgeneric.cpp \
-        platformnv.cpp \
 	separate_rects.cpp \
-	virtualcompositorworker.cpp \
 	vsyncworker.cpp \
 	worker.cpp \
         hwc_util.cpp \

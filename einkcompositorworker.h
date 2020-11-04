@@ -156,7 +156,9 @@ class EinkCompositorWorker : public Worker {
   int Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
+  int ConvertToY4Dither(const buffer_handle_t &fb_handle);
   int ConvertToY1Dither(const buffer_handle_t &fb_handle);
+  int Y4Commit(int epd_mode);
   int A2Commit();
   int PostEink(int *buffer, Rect rect, int mode);
   int SetEinkMode(const buffer_handle_t &fb_handle);

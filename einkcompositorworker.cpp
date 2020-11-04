@@ -647,6 +647,53 @@ static int not_fullmode_count = 0;
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
 
+int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
+
+  DumpLayer("rgba", fb_handle);
+
+  ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
+
+  char *gray256_addr = NULL;
+  int framebuffer_wdith, framebuffer_height, output_format, ret;
+  framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+  framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+
+  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
+    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
+    return -ENOMEM;
+  }
+
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
+
+  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+
+  ret = Rgba888ToGray256(rga_buffer, fb_handle);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+
+  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                0, 0, width, height, (void **)&rga_output_addr);
+
+  gray256_addr = rga_output_addr;
+  gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+
+  if(rga_output_addr != NULL){
+    gralloc_->unlock(gralloc_, src_hnd);
+    rga_output_addr = NULL;
+  }
+  return 0;
+}
+
 int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
 
   DumpLayer("rgba", fb_handle);
@@ -697,6 +744,14 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
   return 0;
 }
 
+int EinkCompositorWorker::Y4Commit(int epd_mode) {
+  Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+  int *gray16_buffer_bak = gray16_buffer;
+  PostEink(gray16_buffer_bak, screen_rect, epd_mode);
+  gLastEpdMode = epd_mode;
+  return 0;
+
+}
 int EinkCompositorWorker::A2Commit() {
   int epd_mode = EPD_NULL;
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
@@ -707,12 +762,10 @@ int EinkCompositorWorker::A2Commit() {
       epd_mode = EPD_A2;
 
   PostEink(gray16_buffer_bak, screen_rect, epd_mode);
-
   gLastEpdMode = EPD_A2;
   return 0;
 
 }
-
 
 int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
   ATRACE_CALL();
@@ -731,7 +784,14 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
     case EPD_FULL_GL16:
     case EPD_FULL_GLR16:
     case EPD_FULL_GLD16:
+      ConvertToY4Dither(fb_handle);
+      Y4Commit(gCurrentEpdMode);
       not_fullmode_count = 0;
+      break;
+    case EPD_PART:
+      ConvertToY4Dither(fb_handle);
+      Y4Commit(gCurrentEpdMode);
+      not_fullmode_count++;
       break;
     case EPD_A2:
       ConvertToY1Dither(fb_handle);
@@ -743,7 +803,7 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
       not_fullmode_count++;
       break;
     default:
-        //LOGE("jeffy part:%d", epdMode);
+      //LOGE("jeffy part:%d", epdMode);
       not_fullmode_count++;
       break;
   }

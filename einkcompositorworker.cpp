@@ -585,8 +585,41 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
     return ret;
 }
 
+int EinkCompositorWorker::DumpEinkSurface(int *buffer){
+
+  char value[PROPERTY_VALUE_MAX];
+  property_get("debug.dump", value, "0");
+  int new_value = 0;
+  new_value = atoi(value);
+  if(new_value > 0){
+      char data_name[100] ;
+      static int DumpSurfaceCount = 0;
+
+      sprintf(data_name,"/data/dump/dmlayer%d_%d_%d.bin", DumpSurfaceCount,
+               ebc_buf_info.vir_width, ebc_buf_info.vir_height);
+      DumpSurfaceCount++;
+      FILE *file = fopen(data_name, "wb+");
+      if (!file)
+      {
+          ALOGW("Could not open %s\n",data_name);
+      } else{
+          ALOGW("open %s and write ok\n",data_name);
+          fwrite(buffer, ebc_buf_info.vir_height * ebc_buf_info.vir_width >> 1 , 1, file);
+          fclose(file);
+
+      }
+      if(DumpSurfaceCount > 20){
+          property_set("debug.dump","0");
+          DumpSurfaceCount = 0;
+      }
+  }
+  return 0;
+}
 int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
   ATRACE_CALL();
+
+  DumpEinkSurface(buffer);
+
   struct ebc_buf_info buf_info;
 
   if(ioctl(ebc_fd, GET_EBC_BUFFER,&buf_info)!=0)
@@ -600,33 +633,6 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
   buf_info.win_y1 = rect.top;
   buf_info.win_y2 = rect.bottom;
   buf_info.epd_mode = mode;
-
-  char value[PROPERTY_VALUE_MAX];
-  property_get("debug.dump", value, "0");
-  int new_value = 0;
-  new_value = atoi(value);
-  if(new_value > 0){
-      char data_name[100] ;
-      static int DumpSurfaceCount = 0;
-
-      sprintf(data_name,"/data/dump/dmlayer%d_%d_%d.bin", DumpSurfaceCount,
-               buf_info.vir_width, buf_info.vir_height);
-      DumpSurfaceCount++;
-      FILE *file = fopen(data_name, "wb+");
-      if (!file)
-      {
-          ALOGW("Could not open %s\n",data_name);
-      } else{
-          ALOGW("open %s and write ok\n",data_name);
-          fwrite(buffer, buf_info.vir_height * buf_info.vir_width >> 1 , 1, file);
-          fclose(file);
-
-      }
-      if(DumpSurfaceCount > 20){
-          property_set("debug.dump","0");
-          DumpSurfaceCount = 0;
-      }
-  }
 
   ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",__FUNCTION__,__LINE__,
       mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
@@ -925,6 +931,21 @@ int EinkCompositorWorker::A2Commit() {
   return 0;
 }
 
+int EinkCompositorWorker::update_fullmode_num(){
+  char value[PROPERTY_VALUE_MAX];
+  property_get("persist.vendor.fullmode_cnt",value,"500");
+
+  not_fullmode_num = atoi(value);
+  if (not_fullmode_num != curr_not_fullmode_num) {
+    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
+        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
+        return -1;
+    }
+    curr_not_fullmode_num = not_fullmode_num;
+  }
+  return 0;
+}
+
 int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
   ATRACE_CALL();
 
@@ -977,18 +998,7 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
       not_fullmode_count++;
       break;
   }
-
-  char value[PROPERTY_VALUE_MAX];
-
-  property_get("persist.vendor.fullmode_cnt",value,"500");
-
-  not_fullmode_num = atoi(value);
-  if (not_fullmode_num != curr_not_fullmode_num) {
-    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
-        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
-    }
-    curr_not_fullmode_num = not_fullmode_num;
-  }
+  update_fullmode_num();
 
   return 0;
 }

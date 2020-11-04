@@ -646,21 +646,123 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
 static int not_fullmode_count = 0;
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
-int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle, Region &A2Region,Region &updateRegion,Region &AutoRegion) {
-  ATRACE_CALL();
 
-  int gPixel_format = 24;
-
-
-  int ret = 0;
-  Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-
-  ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, rgaBuffer_index);
-
-  char value[PROPERTY_VALUE_MAX];
+int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
 
   DumpLayer("rgba", fb_handle);
 
+  ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
+
+  char *gray256_addr = NULL;
+  int framebuffer_wdith, framebuffer_height, output_format, ret;
+  framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
+  framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+
+  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
+    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
+    return -ENOMEM;
+  }
+
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
+
+  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+
+  ret = Rgba888ToGray256(rga_buffer, fb_handle);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+
+  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                0, 0, width, height, (void **)&rga_output_addr);
+
+  gray256_addr = rga_output_addr;
+
+  Region screen_region(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
+  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screen_region);
+
+
+  if(rga_output_addr != NULL){
+    gralloc_->unlock(gralloc_, src_hnd);
+    rga_output_addr = NULL;
+  }
+  return 0;
+}
+
+int EinkCompositorWorker::A2Commit() {
+  int epd_mode = EPD_NULL;
+  Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+  int *gray16_buffer_bak = gray16_buffer;
+  if(gLastEpdMode != EPD_A2)
+      epd_mode = EPD_BLACK_WHITE;
+  else
+      epd_mode = EPD_A2;
+
+  PostEink(gray16_buffer_bak, screen_rect, epd_mode);
+
+  gLastEpdMode = EPD_A2;
+  return 0;
+
+}
+
+
+int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
+  ATRACE_CALL();
+
+  if(!fb_handle){
+    ALOGE("%s,line=%d fb_handle is null",__FUNCTION__,__LINE__);
+    return -1;
+  }
+  int ret = 0;
+
+  switch(gCurrentEpdMode){
+    case EPD_FULL:
+    case EPD_FULL_WIN:
+    case EPD_FULL_DITHER:
+    case EPD_AUTO:
+    case EPD_FULL_GL16:
+    case EPD_FULL_GLR16:
+    case EPD_FULL_GLD16:
+      not_fullmode_count = 0;
+      break;
+    case EPD_A2:
+      ConvertToY1Dither(fb_handle);
+      A2Commit();
+      not_fullmode_count++;
+      break;
+    case EPD_BLOCK:
+       // release_wake_lock("show_advt_lock");
+      not_fullmode_count++;
+      break;
+    default:
+        //LOGE("jeffy part:%d", epdMode);
+      not_fullmode_count++;
+      break;
+  }
+
+  char value[PROPERTY_VALUE_MAX];
+
+  property_get("persist.vendor.fullmode_cnt",value,"500");
+
+  not_fullmode_num = atoi(value);
+  if (not_fullmode_num != curr_not_fullmode_num) {
+    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
+        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
+    }
+    curr_not_fullmode_num = not_fullmode_num;
+  }
+
+
+  return 0;
+#if 0
   char *gray256_addr = NULL;
 
   char* framebuffer_base = NULL;
@@ -751,19 +853,6 @@ send_one_buffer:
     return 0;
 	}
 
-  if((epdMode == EPD_FULL) || (epdMode == EPD_BLOCK) || (epdMode == EPD_UNBLOCK)){
-      A2Region.clear();
-      gLastA2Region.clear();
-      gSavedUpdateRegion.clear();
-  }else if(epdMode == EPD_A2){
-      epdMode = EPD_PART;
-  }
-
-  //only when has a2 region, we are in a2 mode.
-  if(!A2Region.isEmpty() || !gLastA2Region.isEmpty())
-  {
-      epdMode = EPD_A2;
-  }
 
   int *gray16_buffer_bak = gray16_buffer;
 
@@ -812,22 +901,13 @@ send_one_buffer:
               epdMode = EPD_PART;
           } else {
               Region screenRegion(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
-              if (A2Region.isEmpty()) {
-                  //ALOGE("quit A2");
-                  gLastA2Region.clear();
-                  gSavedUpdateRegion.clear();
-                  gCurrentEpdMode = EPD_FULL;
-                  postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-                  goto    send_one_buffer;
+              if(gLastA2Region.isEmpty()){
+                  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
+                  gLastA2Region = screenRegion;
+                  epdMode = EPD_BLACK_WHITE;
               }else{
-                  if(gLastA2Region.isEmpty()){
-                      gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-                      gLastA2Region = screenRegion;
-                      epdMode = EPD_BLACK_WHITE;
-                  }else{
-                      gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-                      gLastA2Region = screenRegion;
-                  }
+                  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
+                  gLastA2Region = screenRegion;
               }
           }
           break;
@@ -839,33 +919,9 @@ send_one_buffer:
           break;
 
   }
-  char pro_value[PROPERTY_VALUE_MAX];
-  property_get("persist.vendor.fullmode_cnt",pro_value,"500");
 
-  not_fullmode_num = atoi(pro_value);
-  if (not_fullmode_num != curr_not_fullmode_num) {
-    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
-        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
-    }
-    curr_not_fullmode_num = not_fullmode_num;
-  }
-
-  PostEink(gray16_buffer_bak, postRect, epdMode);
-
-  ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> end post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());
-
-  if(rga_output_addr != NULL){
-    DrmRgaBuffer &gra_buffer = rgaBuffers[0];
-    buffer_handle_t src_hnd = gra_buffer.buffer()->handle;
-    gralloc_->unlock(gralloc_, src_hnd);
-    rga_output_addr = NULL;
-  }
-  if(framebuffer_base != NULL){
-      gralloc_->unlock(gralloc_, src_hnd);
-      framebuffer_base = NULL;
-  }
-  gray16_buffer_bak = NULL;
   return 0;
+#endif
 }
 
 
@@ -899,7 +955,7 @@ void EinkCompositorWorker::Compose(
     }
   }
   if(isSupportRkRga()){
-    ret = SetEinkMode(composition->fb_handle,composition->currentA2Region,composition->currentUpdateRegion,composition->currentAutoRegion);
+    ret = SetEinkMode(composition->fb_handle);
     if (ret){
       for(int i = 0; i < MaxRgaBuffers; i++) {
         rgaBuffers[i].Clear();

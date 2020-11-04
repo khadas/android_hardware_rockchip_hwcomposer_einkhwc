@@ -156,8 +156,10 @@ class EinkCompositorWorker : public Worker {
   int Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
+  int ConvertToY1Dither(const buffer_handle_t &fb_handle);
+  int A2Commit();
   int PostEink(int *buffer, Rect rect, int mode);
-  int SetEinkMode(const buffer_handle_t &fb_handle, Region &A2Region,Region &updateRegion,Region &AutoRegion);
+  int SetEinkMode(const buffer_handle_t &fb_handle);
   void Compose(std::unique_ptr<EinkComposition> composition);
 
   bool isSupportRkRga() {

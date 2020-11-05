@@ -72,7 +72,7 @@
 #include <cutils/properties.h>
 #include <hardware/hardware.h>
 #include <hardware/hwcomposer.h>
-#include <sw_sync.h>
+#include <libsync/sw_sync.h>
 #include <sync/sync.h>
 #include <utils/Trace.h>
 #include <drm_fourcc.h>
@@ -84,9 +84,7 @@
 #include "hwc_util.h"
 #include "hwc_rockchip.h"
 #include "vsyncworker.h"
-#include <android/configuration.h>
-
-
+#include "android/configuration.h"
 //open header
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -104,7 +102,6 @@
 #include <ui/GraphicBufferMapper.h>
 
 //Image jpg decoder
-#include "MpiJpegDecoder.h"
 #include "libcfa/libcfa.h"
 
 #define UM_PER_INCH 25400
@@ -192,7 +189,7 @@ int gPixel_format = 24;
 
 int ebc_fd = -1;
 void *ebc_buffer_base = NULL;
-struct ebc_buf_info ebc_buf_info;
+struct ebc_buf_info_t ebc_buf_info;
 
 static int gLastEpdMode = EPD_PART;
 static int gCurrentEpdMode = EPD_PART;
@@ -208,44 +205,6 @@ static Mutex mEinkModeLock;
 
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,
                                  int index);
-
-extern "C" {
-    void neon_rgb888_to_gray256ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_rgb888_to_gray256ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_rgb888_to_gray16ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_rgb888_to_gray16ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-
-extern "C" {
-    void neon_bgr888_to_gray16ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_bgr888_to_gray16ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-
-
-extern "C" {
-    void neon_gray16_to_gray2ARM(uint8_t * dest,int w,int h);
-}
-extern "C" {
-    void neon_rgb256_to_gray16DITHER(int  *src, int *dst, short int *res0,  short int*res1, int w);
-}
-extern "C" {
-    void neon_gray256_to_gray16ARM_16(unsigned int * dest,unsigned int *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_gray256_to_gray16ARM_32(unsigned int * dest,unsigned int *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_gray256_to_gray256(int * dest,int *  src,int h,int w);
-}
-
 
 #if 1 //RGA_POLICY
 int hwc_set_epd(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t &fb_target,Region &A2Region,Region &updateRegion,Region &AutoRegion);
@@ -342,7 +301,7 @@ struct hwc_context_t {
 
   int ebc_fd = -1;
   void *ebc_buffer_base = NULL;
-  struct ebc_buf_info ebc_buf_info;
+  struct ebc_buf_info_t ebc_buf_info;
 
 };
 
@@ -677,12 +636,12 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
   for(int i = 0; i < h;i++){
       for(int j = 0; j< w / 2;j++){
           src_data = *gray256_addr;
-          g0 =  gama[(src_data)];
+          g0 =  gama[static_cast<int>(src_data)];
 		      //g0 =  (src_data&0xf0)>>4;
           gray256_addr++;
 
           src_data = *gray256_addr;
-          g3 =  gama[src_data] << 4;
+          g3 =  gama[static_cast<int>(src_data)] << 4;
 		      //g3 =  src_data&0xf0;
           gray256_addr++;
           *temp_dst = g0|g3;
@@ -860,12 +819,6 @@ void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_heig
     }
 #endif
 #if 1
-    if((panel_w % 32) == 0){
-        neon_gray256_to_gray16ARM_32(graynew,gray8bit,vir_height,vir_width,panel_w);
-    }
-    else if((panel_w % 16) == 0){
-        neon_gray256_to_gray16ARM_16(graynew,gray8bit,vir_height,vir_width,panel_w);
-    }
 
     for(j=0; j<vir_height; j++) //c code
     {
@@ -1364,52 +1317,6 @@ void Rgb888_to_color_eink2(char *dst,int *src,int  fb_height, int fb_width, int 
   }
 }
 
-void neon_rgb888_to_gray256ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w)
-{
-   if((vir_w % 32) == 0){
-        neon_rgb888_to_gray256ARM_32(dest,src,h,w,vir_w);
-    }
-    else{
-        neon_rgb888_to_gray256ARM_16(dest,src,h,w,vir_w);
-    }
-}
-
-void rgb888_to_gray16_dither(int *dst,uint8_t *src,int  panel_h, int panel_w,int vir_width)
-{
-    uint8_t *gray_256;
-    int h;
-    int w;
-    short int *line_buffer[2];
-    char *src_buffer;
-    gray_256 = (uint8_t*)malloc(panel_h*panel_w);
-    line_buffer[0] =(short int *) malloc(panel_w*2);
-    line_buffer[1] =(short int *) malloc(panel_w*2);
-    memset(line_buffer[0],0,panel_w*2);
-    memset(line_buffer[1],0,panel_w*2);
-    neon_rgb888_to_gray256ARM((uint8_t*)gray_256,(uint8_t*)src,panel_h,panel_w,vir_width);
-
-    src_buffer = (char*)gray_256;
-    for(h = 0;h<panel_h;h++){
-        Luma8bit_to_4bit_row_16((int*)src_buffer,dst,line_buffer[h&1],line_buffer[!(h&1)],panel_w);
-        dst = dst+panel_w/8;
-        src_buffer = (char*)src_buffer+panel_w;
-    }
-    free(line_buffer[0]);
-    free(line_buffer[1]);
-    free(gray_256);
-}
-
-void neon_rgb888_to_gray16ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w)
-{
-    if((vir_w % 32) == 0){
-        neon_rgb888_to_gray16ARM_32(dest,src,h,w,vir_w);
-    }
-    else{
-        neon_rgb888_to_gray16ARM_16(dest,src,h,w,vir_w);
-    }
-
-}
-
 void Luma8bit_to_4bit_dither(int *dst,int *src,int  vir_height, int vir_width,int panel_w)
 {
     int h;
@@ -1423,7 +1330,6 @@ void Luma8bit_to_4bit_dither(int *dst,int *src,int  vir_height, int vir_width,in
     memset(line_buffer[0],0,panel_w*2);
     memset(line_buffer[1],0,panel_w*2);
 
-    neon_gray256_to_gray256((int*)gray_256,(int*)src,vir_height,vir_width);
     src_buffer = (char*)gray_256;
     for(h = 0;h<vir_height;h++){
         Luma8bit_to_4bit_row_16((int *)src_buffer,(int *)dst,line_buffer[h&1],line_buffer[!(h&1)],panel_w);
@@ -1441,7 +1347,7 @@ void rgb888_to_gray2_dither(uint8_t *dst, uint8_t *src, int panel_h, int panel_w
     //convert to gray 256.
     uint8_t *gray_256;
     gray_256 = (uint8_t*)malloc(panel_h*panel_w);
-    neon_rgb888_to_gray256ARM((uint8_t*)gray_256,(uint8_t*)src,panel_h,panel_w,panel_w);
+    //neon_rgb888_to_gray256ARM((uint8_t*)gray_256,(uint8_t*)src,panel_h,panel_w,panel_w);
 
     //do dither
     short int *line_buffer[2];
@@ -1502,7 +1408,7 @@ static inline void apply_white_region(char *buffer, int height, int width, Regio
 int hwc_post_epd(int *buffer, Rect rect, int mode){
   ATRACE_CALL();
 
-  struct ebc_buf_info buf_info;
+  struct ebc_buf_info_t buf_info;
 
   if(ioctl(ebc_fd, GET_EBC_BUFFER,&buf_info)!=0)
   {
@@ -1563,407 +1469,7 @@ static int not_fullmode_count = 0;
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
 int hwc_set_epd(hwc_drm_display_t *hd, hwc_layer_1_t *fb_target, Region &A2Region,Region &updateRegion,Region &AutoRegion) {
-  ATRACE_CALL();
 
-  int ret = 0;
-  Rect postRect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-
-  ALOGD_IF(log_level(DBG_DEBUG), "%s:rgaBuffer_index=%d", __FUNCTION__, hd->rgaBuffer_index);
-
-  int *gray16_buffer;
-
-  char value[PROPERTY_VALUE_MAX];
-  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
-  //Get virtual address
-  const gralloc_module_t *gralloc;
-  ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                    (const hw_module_t **)&gralloc);
-  if (ret) {
-      ALOGE("Failed to open gralloc module");
-      return ret;
-  }
-
-  char* gray256_addr = NULL;
-
-  DumpLayer("rgba", fb_target->handle);
-
-#if USE_RGA
-
-  DrmRgaBuffer &gra256_buffer = hd->rgaBuffers[hd->rgaBuffer_index];
-  if (!gra256_buffer.Allocate(hd->framebuffer_width, hd->framebuffer_height, HAL_PIXEL_FORMAT_YCrCb_NV12)) {
-    ALOGE("Failed to allocate rga buffer with size %dx%d", hd->framebuffer_width, hd->framebuffer_height);
-    return -ENOMEM;
-  }
-  ret = hwc_rgba888_to_gray256(gra256_buffer, fb_target, hd);
-  if (ret) {
-    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
-    return ret;
-  }
-
-
-  int width,height,stride,byte_stride,format,size;
-  buffer_handle_t src_hnd = gra256_buffer.buffer()->handle;
-
-  width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
-
-  gralloc->lock(gralloc, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
-                  0, 0, width, height, (void **)&gray256_addr);
-#else
-
-  char* framebuffer_base = NULL;
-  int width,height,stride,byte_stride,format,size;
-  buffer_handle_t src_hnd = fb_target->handle;
-
-  width = hwc_get_handle_attibute(gralloc,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc,src_hnd,ATT_SIZE);
-
-  gralloc->lock(gralloc, fb_target->handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
-                  0, 0, width, height, (void **)&framebuffer_base);
-//  ALOGD("rk-debug %s,line = %d, w = %d , h = %d , lock ret = %d",__FUNCTION__,__LINE__,ebc_buf_info.width,ebc_buf_info.height,ret);
-//  ALOGD("rk-debug %s,line = %d, framebuffer w = %d , h = %d , format =  %d",__FUNCTION__,__LINE__,width,height,format);
-//  ALOGD("rk-debug %s,line = %d, framebuffer base = %p ",__FUNCTION__,__LINE__,framebuffer_base);
-
-#endif
-send_one_buffer:
-
-  ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> begin post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());
-  //reset mode to default.
-  int epdMode = gCurrentEpdMode;
-  gCurrentEpdMode = gResetEpdMode;
-
-	if(epdMode == EPD_NULL){
-    gralloc->unlock(gralloc, src_hnd);
-    gray256_addr = NULL;
-    return 0;
-	}
-
-  if(epdMode == EPD_FULL || epdMode == EPD_BLOCK)
-  {
-      A2Region.clear();
-  }
-  else if(epdMode == EPD_A2)
-  {
-      epdMode = EPD_PART;
-  }
-
-  //only when has a2 region, we are in a2 mode.
-  if(!A2Region.isEmpty() || !gLastA2Region.isEmpty())
-  {
-      epdMode = EPD_A2;
-  }
-
-  int *gray16_buffer_bak = gray16_buffer;
-
-#if USE_RGA
-  if(epdMode == EPD_AUTO)
-  {
-
-    char pro_value[PROPERTY_VALUE_MAX];
-    property_get("debug.auto",pro_value,"0");
-    switch(atoi(pro_value)){
-      case 0:
-        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-        break;
-      case 1:
-        gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-        break;
-      case 2:
-        Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
-                          ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
-        break;
-      case 3:
-        gray256_to_gray2_dither((char *)gray256_addr,
-              (char *)gray16_buffer, ebc_buf_info.vir_height,
-              ebc_buf_info.width,
-              ebc_buf_info.vir_width, AutoRegion);
-        break;
-      case 4:
-        gray256_to_gray2(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-        break;
-      default:
-        gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-        break;
-    }
-  }
-  else if (epdMode != EPD_A2)
-  {
-    if(epdMode == EPD_FULL_DITHER){
-      gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width);
-    }else{
-      gray256_to_gray16(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-#if USE_NENO_TO_Y16
-      if((ebc_buf_info.width % 32) == 0){
-        neon_gray256_to_gray16ARM_32((unsigned int *)gray16_buffer,(unsigned int *)gray256_addr,ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
-      }
-      else if((ebc_buf_info.width % 16) == 0){
-          neon_gray256_to_gray16ARM_16((unsigned int *)gray16_buffer,(unsigned int *)gray256_addr,ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
-      }
-#endif
-    }
-  }
-
-  switch(epdMode){
-      case EPD_FULL:
-      case EPD_FULL_WIN:
-      case EPD_FULL_DITHER:
-      case EPD_AUTO:
-      case EPD_FULL_GL16:
-      case EPD_FULL_GLR16:
-      case EPD_FULL_GLD16:
-          //LOGE("jeffy FULL");
-          not_fullmode_count = 0;
-          break;
-      case EPD_A2:
-          {
-              Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-              if(log_level(DBG_DEBUG))
-                  screenRegion.dump("fremebuffer1 screenRegion");
-              if (screenRegion.subtract(A2Region).isEmpty() &&
-                      screenRegion.subtract(gLastA2Region).isEmpty()) {
-                  //all screen region was in a2 mode.
-                  if(log_level(DBG_DEBUG))
-                      screenRegion.dump("fremebuffer subtract screenRegion");
-                  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screenRegion);
-                  break;
-              }
-              //window a2.
-              Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray256_addr),
-                                ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
-              if (A2Region.isEmpty()) {
-                 // ALOGE("jeffy quit A2");
-                  //get out a2 mode.
-                  //1.reset updated region to white.
-                  updateRegion.orSelf(gLastA2Region);
-                  updateRegion.orSelf(gSavedUpdateRegion);
-                  gLastA2Region.clear();
-                  gSavedUpdateRegion.clear();
-                  apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.vir_width, updateRegion);
-
-                  //2.paint updated region.
-                  epdMode = EPD_A2;//EPD_BLACK_WHITE;//
-                  hwc_post_epd(gray16_buffer, postRect, epdMode);
-
-                  //3.will repaint those regions in full mode.
-                  gCurrentEpdMode = EPD_FULL_WIN;
-                  Rect rect = updateRegion.getBounds();
-                  postRect = rect;
-                  goto    send_one_buffer;
-              }
-
-              Region newA2Region = A2Region - gSavedUpdateRegion - gLastA2Region;
-              Region newUpdateRegion = updateRegion - gSavedUpdateRegion - gLastA2Region;
-              if(log_level(DBG_DEBUG)){
-                  newA2Region.dump("fremebuffer1 newA2Region");
-                  newUpdateRegion.dump("fremebuffer1 newUpdateRegion");
-                  A2Region.dump("fremebuffer1 currentA2Region");
-              }
-
-              //update saved region info.
-              gSavedUpdateRegion.orSelf(gLastA2Region);
-              gSavedUpdateRegion.orSelf(updateRegion);
-
-              gLastA2Region = A2Region;
-              gray256_to_gray2_dither((char *)gray256_addr,
-                      (char *)gray16_buffer, ebc_buf_info.vir_height,
-                      ebc_buf_info.width,
-                      ebc_buf_info.vir_width, gSavedUpdateRegion);
-
-              if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
-                  //has new region.
-                  if(log_level(DBG_DEBUG)){
-                      newA2Region.dump("fremebuffer2 newA2Region");
-                      newUpdateRegion.dump("fremebuffer2 newUpdateRegion");
-                  }
-                  //1.reset new region to white, and paint them.
-                  apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
-                          ebc_buf_info.vir_width, newUpdateRegion | newA2Region);
-                  epdMode = EPD_BLACK_WHITE;
-                  hwc_post_epd(gray16_buffer, postRect, epdMode);
-                  //2.will repaint those regions in a2 mode.
-                  goto    send_one_buffer;
-              }
-              //not_fullmode_count++;
-              break;
-          }
-      case EPD_BLOCK:
-         // release_wake_lock("show_advt_lock");
-      default:
-          //LOGE("jeffy part:%d", epdMode);
-          not_fullmode_count++;
-          break;
-
-  }
-
-#else
-  if (epdMode != EPD_A2)
-  {
-      if(ebc_buf_info.color_panel == 1)
-      {
-          int i;
-          int *temp_rgb;
-          int*temp_gray;
-          temp_rgb = (int*)(framebuffer_base);
-          temp_gray = (int*)gray16_buffer;
-          //image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(new_buffer));
-          //neon_rgb888_to_gray16ARM((uint8_t *)gray16_buffer, (uint8_t *)(new_buffer),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
-          Rgb888_to_color_eink((char*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
-      }
-      else if(gPixel_format==8) {
-          if (epdMode == EPD_FULL_DITHER)
-          {
-              Luma8bit_to_4bit_dither((int*)gray16_buffer,(int*)(framebuffer_base),ebc_buf_info.vir_height,ebc_buf_info.vir_width,ebc_buf_info.width);
-          }
-          else
-          {
-              Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(framebuffer_base),ebc_buf_info.height,ebc_buf_info.width,ebc_buf_info.width);
-          }
-      }
-      else
-      {
-          if (epdMode == EPD_FULL_DITHER)
-          {
-              rgb888_to_gray16_dither((int*)gray16_buffer,(uint8_t*)(framebuffer_base), ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-          }
-          else
-          {
-              neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(framebuffer_base), ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-      }
-      }
-  }
-  switch(epdMode){
-        case EPD_FULL:
-        case EPD_FULL_WIN:
-        case EPD_FULL_DITHER:
-        case EPD_AUTO:
-        case EPD_FULL_GL16:
-        case EPD_FULL_GLR16:
-        case EPD_FULL_GLD16:
-            //LOGE("jeffy FULL");
-            not_fullmode_count = 0;
-            break;
-        case EPD_A2:
-            {
-                Region screenRegion(Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height));
-                if(log_level(DBG_DEBUG))
-                    screenRegion.dump("fremebuffer1 screenRegion");
-                if (screenRegion.subtract(A2Region).isEmpty() &&
-                        screenRegion.subtract(gLastA2Region).isEmpty()) {
-                    //all screen region was in a2 mode.
-                    if(log_level(DBG_DEBUG))
-                        screenRegion.dump("fremebuffer subtract screenRegion");
-                    rgb888_to_gray2_dither((uint8_t*)gray16_buffer,
-                                    (uint8_t*)framebuffer_base, ebc_buf_info.vir_height,
-                                    ebc_buf_info.width, ebc_buf_info.vir_width, screenRegion);
-                    break;
-                }
-                //window a2.
-                uint8_t *gray_256;
-			          gray_256 = (uint8_t*)malloc(ebc_buf_info.height * ebc_buf_info.width);
-                neon_rgb888_to_gray256ARM((uint8_t*)gray_256,
-                            (uint8_t*)framebuffer_base,
-                            ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-                Luma8bit_to_4bit((unsigned int*)gray16_buffer,(unsigned int*)(gray_256),
-                                  ebc_buf_info.height, ebc_buf_info.width,ebc_buf_info.width);
-                if (A2Region.isEmpty()) {
-                   // ALOGE("jeffy quit A2");
-                    //get out a2 mode.
-                    //1.reset updated region to white.
-                    updateRegion.orSelf(gLastA2Region);
-                    updateRegion.orSelf(gSavedUpdateRegion);
-                    gLastA2Region.clear();
-                    gSavedUpdateRegion.clear();
-                    apply_white_region((char*)gray16_buffer, ebc_buf_info.height,ebc_buf_info.width, updateRegion);
-
-                    //2.paint updated region.
-                    epdMode = EPD_A2;//EPD_BLACK_WHITE;//
-                    hwc_post_epd(gray16_buffer, postRect, epdMode);
-
-                    //3.will repaint those regions in full mode.
-                    gCurrentEpdMode = EPD_FULL_WIN;
-                    Rect rect = updateRegion.getBounds();
-                    postRect = rect;
-                    free(gray_256);
-                    goto    send_one_buffer;
-                }
-
-                Region newA2Region = A2Region - gSavedUpdateRegion - gLastA2Region;
-                Region newUpdateRegion = updateRegion - gSavedUpdateRegion - gLastA2Region;
-
-                if(log_level(DBG_DEBUG)){
-                    newA2Region.dump("fremebuffer1 newA2Region");
-                    newUpdateRegion.dump("fremebuffer1 newUpdateRegion");
-                    A2Region.dump("fremebuffer1 currentA2Region");
-                }
-
-                //update saved region info.
-                gSavedUpdateRegion.orSelf(gLastA2Region);
-                gSavedUpdateRegion.orSelf(updateRegion);
-                gLastA2Region = A2Region;
-                gray256_to_gray2_dither((char *)gray_256,
-                        (char *)gray16_buffer, ebc_buf_info.vir_height,
-                        ebc_buf_info.width, ebc_buf_info.vir_width,
-                        gSavedUpdateRegion);
-                if (!newA2Region.isEmpty() || !newUpdateRegion.isEmpty()) {
-                    //has new region.
-                    if(log_level(DBG_DEBUG)){
-                        newA2Region.dump("fremebuffer2 newA2Region");
-                        newUpdateRegion.dump("fremebuffer2 newUpdateRegion");
-                    }
-                    //1.reset new region to white, and paint them.
-                    apply_white_region((char*)gray16_buffer, ebc_buf_info.height,
-                            ebc_buf_info.vir_width, newUpdateRegion | newA2Region);
-                    epdMode = EPD_BLACK_WHITE;
-                    hwc_post_epd(gray16_buffer, postRect, epdMode);
-                    //2.will repaint those regions in a2 mode.
-                    free(gray_256);
-                    goto    send_one_buffer;
-                }
-                //not_fullmode_count++;
-                break;
-            }
-        case EPD_BLOCK:
-           // release_wake_lock("show_advt_lock");
-        default:
-            //LOGE("jeffy part:%d", epdMode);
-            not_fullmode_count++;
-            break;
-
-    }
-#endif
-
-  char pro_value[PROPERTY_VALUE_MAX];
-  property_get("persist.vendor.fullmode_cnt",pro_value,"500");
-
-  //not fullmode count will do by kernel, do not deal now here
-  //if(not_fullmode_count > atoi(pro_value)){
-  //    epdMode = EPD_FULL;
-  //    not_fullmode_count = 0;
-  //}
-
-  not_fullmode_num = atoi(pro_value);
-  if (not_fullmode_num != curr_not_fullmode_num) {
-    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
-        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
-    }
-    curr_not_fullmode_num = not_fullmode_num;
-  }
-  hwc_post_epd(gray16_buffer_bak, postRect, epdMode);
-
-  ALOGD_IF(log_level(DBG_DEBUG),"HWC %s,line = %d >>>>>>>>>>>>>> end post frame = %d >>>>>>>>",__FUNCTION__,__LINE__,get_frame());
-
-  gralloc->unlock(gralloc, src_hnd);
-  free(gray16_buffer_bak);
-  gray16_buffer_bak = NULL;
-  gray16_buffer = NULL;
   return 0;
 }
 
@@ -1978,7 +1484,7 @@ bool decode_image_file(const char* filename, SkBitmap* bitmap,
                                SkColorType colorType = kN32_SkColorType,
                                bool requireUnpremul = false) {
     sk_sp<SkData> data(SkData::MakeFromFileName(filename));
-    std::unique_ptr<SkCodec> codec(SkCodec::NewFromData(data));
+	  std::unique_ptr<SkCodec> codec(SkCodec::MakeFromData(std::move(data)));
     if (!codec) {
         return false;
     }
@@ -2024,86 +1530,6 @@ void drawLogoPic(const char src_path[], void* buf, int width, int height)
     canvas.drawBitmap(bitmap, x, y, NULL);
 }
 
-static void inputJpgLogo(const char src_path[],void *dst, int w, int h, int color)
-{
-        int bpp = 1.5;
-        uint8_t*dest_data = (uint8_t *)dst;
-        char *buf = NULL;
-        bool ret = false;
-        FILE *fp = NULL;
-        size_t file_size = 0;
-        uint32_t h_stride, v_stride, width, height;
-        uint8_t *base = NULL;
-        MpiJpegDecoder decoder;
-        MpiJpegDecoder::OutputFrame_t frameOut;
-
-        fp = fopen(src_path, "rb");
-        if (NULL == fp) {
-                ALOGE("failed to open file %s - %s", src_path, strerror(errno));
-                return;
-        }
-        ALOGD("open file %s", src_path);
-
-        fseek(fp, 0L, SEEK_END);
-        file_size = ftell(fp);
-        rewind(fp);
-
-        buf = (char*)malloc(file_size);
-        if (NULL == *buf) {
-                ALOGE("failed to malloc buffer - file %s", src_path);
-                fclose(fp);
-                return;
-        }
-
-        fread(buf, 1, file_size, fp);
-        fclose(fp);
-
-        if (color)
-            ret = decoder.prepareDecoder(MpiJpegDecoder::OUT_FORMAT_ARGB);
-        else
-            ret = decoder.prepareDecoder(MpiJpegDecoder::OUT_FORMAT_YUV420SP);
-        if (!ret) {
-                ALOGE("failed to prepare JPEG decoder");
-                goto DECODE_OUT;
-        }
-
-        memset(&frameOut, 0, sizeof(frameOut));
-        ret = decoder.decodePacket(buf, file_size, &frameOut);
-        if (!ret) {
-                ALOGE("failed to decode packet");
-                goto DECODE_OUT;
-        }
-
-        ALOGE("decode packet size = %d, width=%d, h_stride=%d, height=%d\n", frameOut.OutputSize, frameOut.DisplayWidth, frameOut.FrameWidth,
-                frameOut.DisplayHeight);
-        /* TODO - get diaplay for the frameOut.
-        * - frame address: frameOut.MemVirAddr
-        * - frame size: frameOut.OutputSize */
-        h_stride = frameOut.FrameWidth;
-        v_stride = frameOut.FrameHeight;
-        width = frameOut.DisplayWidth;
-        height = frameOut.DisplayHeight;
-        base = frameOut.MemVirAddr;
-        if (color)
-            bpp = 4;
-        else
-            bpp = 1.5;
-        for (int i = 0; i< height; i++, base += h_stride*bpp) {
-                memcpy(dest_data, base, width*bpp);
-                dest_data += width*bpp;
-        }
-
-        /* Output frame buffers within limits, so release frame buffer if one
-        frame has been display successful. */
-        decoder.deinitOutputFrame(&frameOut);
-
-DECODE_OUT:
-        decoder.flushBuffer();
-        if (buf)
-                free(buf);
-        return ;
-}
-
 int hwc_post_epd_logo(const char src_path[]) {
     int *gray16_buffer;
     void *image_addr;
@@ -2113,7 +1539,6 @@ int hwc_post_epd_logo(const char src_path[]) {
         image_new_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
         image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
         drawLogoPic(src_path, (void *)image_new_addr, ebc_buf_info.width, ebc_buf_info.height);
-	 image_to_cfa_grayscale(ebc_buf_info.width, ebc_buf_info.height, (unsigned char*)(image_new_addr), (unsigned char*)(image_addr));
 	 free(image_new_addr);
 	 image_new_addr = NULL;
     }
@@ -2141,8 +1566,6 @@ int hwc_post_epd_logo(const char src_path[]) {
 
     if (ebc_buf_info.color_panel == 2)
         Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/2, ebc_buf_info.width/2, ebc_buf_info.vir_width);
-    else
-        neon_rgb888_to_gray16ARM((uint8_t*)gray16_buffer,(uint8_t*)(image_addr), ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.vir_width);
 
     //EPD post
     gCurrentEpdMode = EPD_BLOCK;
@@ -2159,17 +1582,6 @@ int hwc_post_epd_logo(const char src_path[]) {
     gray16_buffer = NULL;
     gray16_buffer_bak = NULL;
 
-    return 0;
-}
-
-static int unflattenRegion(const struct region_buffer_t &buffer, Region &region) {
-    region.clear();
-    if (buffer.size)
-        if (!buffer.size || buffer.size > sizeof(buffer.buffer))
-            return -1;
-    if (region.unflatten((void const*)buffer.buffer,
-                buffer.size) != NO_ERROR)
-        return -1;
     return 0;
 }
 

@@ -45,7 +45,6 @@
 
 namespace android {
 
-#if (RK_RGA_COMPSITE_SYNC | RK_RGA_PREPARE_ASYNC)
 struct DrmRgaBuffer {
   DrmRgaBuffer() : release_fence_fd_(-1) {
   }
@@ -127,7 +126,6 @@ struct DrmRgaBuffer {
   sp<GraphicBuffer> buffer_;
   int release_fence_fd_;
 };
-#endif
 
 struct DrmFramebuffer {
   DrmFramebuffer() : release_fence_fd_(-1) {

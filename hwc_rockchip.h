@@ -190,7 +190,6 @@ int hwc_get_handle_alreadyStereo(const gralloc_module_t *gralloc, buffer_handle_
 int hwc_set_handle_alreadyStereo(const gralloc_module_t *gralloc, buffer_handle_t hnd, int32_t alreadyStereo);
 int hwc_get_handle_layername(const gralloc_module_t *gralloc, buffer_handle_t hnd, char* layername, unsigned long len);
 int hwc_set_handle_layername(const gralloc_module_t *gralloc, buffer_handle_t hnd, const char* layername);
-int hwc_get_handle_EinkInfo(const gralloc_module_t *gralloc,buffer_handle_t hnd, const struct rk_ashmem_eink_t *rk_ashmem_eink);
 
 #endif
 int hwc_get_handle_width(const gralloc_module_t *gralloc, buffer_handle_t hnd);

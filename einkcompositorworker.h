@@ -55,9 +55,6 @@
 #include <ui/Region.h>
 #include <ui/GraphicBufferMapper.h>
 
-//Image jpg decoder
-#include "MpiJpegDecoder.h"
-
 //rga
 #include <RockchipRga.h>
 
@@ -97,7 +94,7 @@ namespace android {
 #define EPD_FULL_GLD16    (23)
 
 /*android use struct*/
-struct ebc_buf_info{
+struct ebc_buf_info_t{
   int offset;
   int epd_mode;
   int height;
@@ -193,7 +190,7 @@ class EinkCompositorWorker : public Worker {
 
   int ebc_fd = -1;
   void *ebc_buffer_base = NULL;
-  struct ebc_buf_info ebc_buf_info;
+  struct ebc_buf_info_t ebc_buf_info;
 
   int gLastEpdMode = EPD_PART;
   int gCurrentEpdMode = EPD_PART;

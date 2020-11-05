@@ -48,52 +48,14 @@
 #include <hardware/hardware.h>
 #include <hardware/hwcomposer.h>
 #include <sched.h>
-#include <sw_sync.h>
-#include <sync/sync.h>
-#include "libcfa/libcfa.h"
+#include <libsync/sw_sync.h>
+#include <android/sync.h>
+
 
 namespace android {
 
 static const int kMaxQueueDepth = 1;
 static const int kAcquireWaitTimeoutMs = 3000;
-
-extern "C" {
-    void neon_rgb888_to_gray256ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_rgb888_to_gray256ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_rgb888_to_gray16ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_rgb888_to_gray16ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-
-extern "C" {
-    void neon_bgr888_to_gray16ARM_32(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_bgr888_to_gray16ARM_16(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
-}
-
-
-extern "C" {
-    void neon_gray16_to_gray2ARM(uint8_t * dest,int w,int h);
-}
-extern "C" {
-    void neon_rgb256_to_gray16DITHER(int  *src, int *dst, short int *res0,  short int*res1, int w);
-}
-extern "C" {
-    void neon_gray256_to_gray16ARM_16(unsigned int * dest,unsigned int *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_gray256_to_gray16ARM_32(unsigned int * dest,unsigned int *  src,int h,int w,int vir_w);
-}
-extern "C" {
-    void neon_gray256_to_gray256(int * dest,int *  src,int h,int w);
-}
-
 
 EinkCompositorWorker::EinkCompositorWorker()
     : Worker("Eink-compositor", HAL_PRIORITY_URGENT_DISPLAY),
@@ -159,7 +121,7 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
   if (ebc_fd < 0){
       ALOGE("open /dev/ebc failed\n");
   }
-
+  memset(&ebc_buf_info,0x00,sizeof(struct ebc_buf_info_t));
   if(ioctl(ebc_fd, GET_EBC_BUFFER_INFO,&ebc_buf_info)!=0){
       ALOGE("GET_EBC_BUFFER failed\n");
   }
@@ -692,7 +654,7 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
 
   DumpEinkSurface(buffer);
 
-  struct ebc_buf_info buf_info;
+  struct ebc_buf_info_t buf_info;
 
   if(ioctl(ebc_fd, GET_EBC_BUFFER,&buf_info)!=0)
   {
@@ -733,14 +695,13 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
 
   char* framebuffer_base = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
-  if (ebc_buf_info.color_panel == 1) {
-    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
-    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
-  } else if (ebc_buf_info.color_panel == 2) {
+  if (ebc_buf_info.color_panel == 2) {
     framebuffer_wdith = ebc_buf_info.fb_width / 2;
     framebuffer_height = ebc_buf_info.fb_height / 2;
     output_format = HAL_PIXEL_FORMAT_RGBA_8888;
+  } else{
+
+    return -1;
   }
 
   DumpLayer("rgba", fb_handle);
@@ -791,10 +752,8 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
     framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
     framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
     output_format = HAL_PIXEL_FORMAT_RGBA_8888;
-  } else if (ebc_buf_info.color_panel == 2) {
-    framebuffer_wdith = ebc_buf_info.fb_width / 2;
-    framebuffer_height = ebc_buf_info.fb_height / 2;
-    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
+  } else{
+    return -1;
   }
 
   DumpLayer("rgba", fb_handle);
@@ -823,9 +782,6 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
 
   gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&framebuffer_base);
-
-  image_to_cfa_grayscale(ebc_buf_info.fb_width, ebc_buf_info.fb_height, (unsigned char*)(framebuffer_base), (unsigned char*)(rgba_new_buffer));
-  neon_rgb888_to_gray16ARM((uint8_t *)gray16_buffer, (uint8_t *)(rgba_new_buffer),ebc_buf_info.fb_height,ebc_buf_info.fb_width,ebc_buf_info.vir_width);
 
   if(rga_output_addr != NULL){
     gralloc_->unlock(gralloc_, src_hnd);

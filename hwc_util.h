@@ -101,14 +101,5 @@ typedef enum
 
 int hwc_get_int_property(const char* pcProperty,const char* default_value);
 int hwc_get_string_property(const char* pcProperty,const char* default_value,char* retult);
-int DetectValidData(int *data,int w,int h);
-void ctl_gpu_performance(int on);
-void ctl_cpu_performance(int on, int type);
-void ctl_little_cpu(int on);
-int set_cpu_min_freq(int freq);
-#if RK_CTS_WORKROUND
-bool FindAppHintInFile(FILE *regFile, const char *pszAppName,
-                        const char *pszHintName, void *pReturn,IMG_DATA_TYPE eDataType);
-#endif
 
 #endif // _HWC_UTIL_

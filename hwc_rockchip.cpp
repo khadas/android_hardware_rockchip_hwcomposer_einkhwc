@@ -36,9 +36,6 @@
 
 #define LOG_TAG "hwc_rk"
 
-// #define ENABLE_DEBUG_LOG
-#include <log/custom_log.h>
-
 #include <inttypes.h>
 #ifdef TARGET_BOARD_PLATFORM_RK3368
 #include <hardware/img_gralloc_public.h>
@@ -95,11 +92,11 @@ int hwc_init_version()
 #endif
 
     /* RK_GRAPHICS_VER=commit-id:067e5d0: only keep string after '=' */
-    sscanf(RK_GRAPHICS_VER, "%*[^=]=%s", acCommit);
+//    sscanf(RK_GRAPHICS_VER, "%*[^=]=%s", acCommit);
 
-    property_set("sys.ghwc.version", acVersion);
-    property_set("sys.ghwc.commit", acCommit);
-    ALOGD(RK_GRAPHICS_VER);
+//    property_set("sys.ghwc.version", acVersion);
+//    property_set("sys.ghwc.commit", acCommit);
+//    ALOGD(RK_GRAPHICS_VER);
     return 0;
 }
 
@@ -287,32 +284,6 @@ exit:
     return ret;
 }
 #endif
-
-int hwc_get_handle_EinkInfo(const gralloc_module_t *gralloc,buffer_handle_t hnd, const struct rk_ashmem_eink_t *rk_ashmem_eink)
-{
-    int ret = 0;
-    int op = GRALLOC_MODULE_PERFORM_GET_RK_ASHMEM;
-    struct rk_ashmem_eink_t rk_ashmem;
-
-    if(!rk_ashmem_eink)
-        return -EINVAL;
-
-    if(gralloc && gralloc->perform)
-        ret = gralloc->perform(gralloc, op, hnd, &rk_ashmem);
-    else
-        ret = -EINVAL;
-
-    if(ret != 0)
-    {
-        ALOGE("%s:cann't get value from gralloc", __FUNCTION__);
-        goto exit;
-    }
-    memcpy((void*)rk_ashmem_eink,(void*)(&(rk_ashmem)),sizeof(struct rk_ashmem_eink_t));
-
-
-exit:
-    return ret;
-}
 
 
 int hwc_get_handle_width(const gralloc_module_t *gralloc, buffer_handle_t hnd)

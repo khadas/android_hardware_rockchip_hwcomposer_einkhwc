@@ -67,51 +67,61 @@
 
 namespace android {
 
-#define EPD_NULL            (-1)
-#define EPD_AUTO            (0)
-#define EPD_FULL            (1)
-#define EPD_A2              (2)
-#define EPD_PART            (3)
-#define EPD_FULL_DITHER     (4)
-#define EPD_RESET           (5)
-#define EPD_BLACK_WHITE     (6)
-#define EPD_BG            (7)
-#define EPD_BLOCK           (8)
-#define EPD_FULL_WIN        (9)
-#define EPD_OED_PART		(10)
-#define EPD_DIRECT_PART     (11)
-#define EPD_DIRECT_A2       (12)
-#define EPD_STANDBY			(13)
-#define EPD_POWEROFF        (14)
-#define EPD_NOPOWER        (15)
-#define EPD_AUTO_BG        (16)
-#define EPD_UNBLOCK        (17)
-#define EPD_PART_GL16     (18)
-#define EPD_PART_GLR16   (19)
-#define EPD_PART_GLD16   (20)
-#define EPD_FULL_GL16      (21)
-#define EPD_FULL_GLR16    (22)
-#define EPD_FULL_GLD16    (23)
+#define EINK_FB_SIZE		0x400000 /* 4M */
 
-/*android use struct*/
-struct ebc_buf_info_t{
-  int offset;
-  int epd_mode;
-  int height;
-  int width;
-  int vir_height;
-  int vir_width;
-  int fb_width;
-  int fb_height;
-  int color_panel;
-  int win_x1;
-  int win_y1;
-  int win_x2;
-  int win_y2;
-  int rotate;
-  int width_mm;
-  int height_mm;
-}__packed;
+/*
+ * IMPORTANT: Those values is corresponding to android hardware program,
+ * so *FORBID* to changes bellow values, unless you know what you're doing.
+ * And if you want to add new refresh modes, please appended to the tail.
+ */
+enum panel_refresh_mode {
+	EPD_NULL			= -1,
+	EPD_AUTO			= 0,
+	EPD_OVERLAY		= 1,
+	EPD_FULL_GC16		= 2,
+	EPD_FULL_GL16		= 3,
+	EPD_FULL_GLR16		= 4,
+	EPD_FULL_GLD16		= 5,
+	EPD_FULL_GCC16		= 6,
+	EPD_PART_GC16		= 7,
+	EPD_PART_GL16		= 8,
+	EPD_PART_GLR16		= 9,
+	EPD_PART_GLD16		= 10,
+	EPD_PART_GCC16		= 11,
+	EPD_A2				= 12,
+	EPD_A2_DITHER		= 13,
+	EPD_DU				= 14,
+	EPD_RESET			= 15,
+	EPD_SUSPEND		= 16,
+	EPD_RESUME			= 17,
+	EPD_POWER_OFF		= 18,
+	EPD_FULL_DIRECT	= 19,
+	EPD_PART_DIRECT	= 20,
+	EPD_A2_DIRECT		= 21,
+	EPD_DU_DIRECT		= 22,
+	EPD_AUTO_DIRECT	= 23,
+	EPD_OVERLAY_DIRECT	= 24,
+	EPD_PART_EINK		= 25,
+	EPD_FULL_EINK		= 26,
+};
+
+/*
+ * IMPORTANT: android hardware use struct, so *FORBID* to changes this, unless you know what you're doing.
+ */
+struct ebc_buf_info_t {
+	int offset;
+	int epd_mode;
+	int height;
+	int width;
+	int panel_color;
+	int win_x1;
+	int win_y1;
+	int win_x2;
+	int win_y2;
+	int width_mm;
+	int height_mm;
+};
+
 struct win_coordinate{
 	int x1;
 	int x2;
@@ -119,13 +129,16 @@ struct win_coordinate{
 	int y2;
 };
 
-
 #define USE_RGA 1
-
-#define GET_EBC_BUFFER 0x7000
-#define SET_EBC_SEND_BUFFER 0x7001
-#define GET_EBC_BUFFER_INFO 0x7003
-#define SET_EBC_NOT_FULL_NUM 0x7006
+/*
+ * ebc system ioctl command
+ */
+#define EBC_GET_BUFFER			(0x7000)
+#define EBC_SEND_BUFFER			(0x7001)
+#define EBC_GET_BUFFER_INFO		(0x7002)
+#define EBC_SET_FULL_MODE_NUM	(0x7003)
+#define EBC_ENABLE_OVERLAY		(0x7004)
+#define EBC_DISABLE_OVERLAY		(0x7005)
 
 class EinkCompositorWorker : public Worker {
  public:
@@ -192,9 +205,9 @@ class EinkCompositorWorker : public Worker {
   void *ebc_buffer_base = NULL;
   struct ebc_buf_info_t ebc_buf_info;
 
-  int gLastEpdMode = EPD_PART;
-  int gCurrentEpdMode = EPD_PART;
-  int gResetEpdMode = EPD_PART;
+  int gLastEpdMode = EPD_PART_GC16;
+  int gCurrentEpdMode = EPD_PART_GC16;
+  int gResetEpdMode = EPD_PART_GC16;
   Region gLastA2Region;
   Region gSavedUpdateRegion;
 

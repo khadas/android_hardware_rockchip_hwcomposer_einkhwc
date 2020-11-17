@@ -48,22 +48,10 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
         librga \
         libjpeg \
-        libpng \
-        libandroidicu \
-        libdng_sdk \
-        libexpat \
-        libft2 \
-        libz
-
-LOCAL_WHOLE_STATIC_LIBRARIES := \
-        libskia \
-        libarect \
-        libsfntly
+        libpng
 
 LOCAL_STATIC_LIBRARIES := \
-	libtinyxml2 \
-        libwebp-decode \
-        libwebp-encode
+	libtinyxml2
 
 
 LOCAL_C_INCLUDES := \
@@ -75,10 +63,7 @@ LOCAL_C_INCLUDES := \
 	system/core \
 	system/core/libsync/include \
 	hardware/rockchip/librga \
-	external/skia/src/core \
         frameworks/native/include \
-        external/libjpeg-turbo \
-        external/libpng
 
 LOCAL_SRC_FILES := \
 	autolock.cpp \
@@ -92,10 +77,12 @@ LOCAL_SRC_FILES := \
         einkcompositorworker.cpp
 
 MAJOR_VERSION := "RK_GRAPHICS_VER=commit-id:$(shell cd $(LOCAL_PATH) && git log  -1 --oneline | awk '{print $$1}')"
-LOCAL_CPPFLAGS += -DRK_GRAPHICS_VER=\"$(MAJOR_VERSION)\"
+LOCAL_CPPFLAGS += -DRK_GRAPHICS_VER=\"$(MAJOR_VERSION)\" -DRK356X
 
 LOCAL_MODULE := hwcomposer.$(TARGET_BOARD_HARDWARE)
 
+
+LOCAL_PROPRIETARY_MODULE := true
 LOCAL_CFLAGS += -Wno-unused-function -Wno-unused-parameter -Wno-unused-variable
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_RELATIVE_PATH := hw

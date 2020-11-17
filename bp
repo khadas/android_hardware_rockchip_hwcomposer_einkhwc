@@ -33,12 +33,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+BOARD_USES_DRM_HWCOMPOSER = ["true"]
+// ANDROIDMK TRANSLATION ERROR: unsupported conditional
+// ifeq ($(strip $(BOARD_USES_DRM_HWCOMPOSER)),true)
 
+MAJOR_VERSION = ["\"RK_GRAPHICS_VER=commit-id:" + "__builtin_func:shell cd <'LOCAL_PATH' unset> && git log  -1 --oneline | awk '{print $1}'" + "\""]
 cc_library_shared {
-    name: "hwcomposer.rk30board",
-    
-    vendor_available: true,
-    defaults: ["skia_deps"],
+    name: "hwcomposer." + TARGET_BOARD_HARDWARE,
+
     shared_libs: [
         "libcutils",
         "libhardware",
@@ -49,10 +51,19 @@ cc_library_shared {
         "librga",
         "libjpeg",
         "libpng",
+        "libandroidicu",
+        "libdng_sdk",
+        "libexpat",
+        "libft2",
+        "libz",
     ],
 
     whole_static_libs: [
         "libskia",
+        "libarect",
+        "libsfntly",
+        "libwebp-decode",
+        "libwebp-encode",
     ],
 
     static_libs: ["libtinyxml2"],
@@ -84,15 +95,19 @@ cc_library_shared {
         "einkcompositorworker.cpp",
     ],
 
+    cppflags: ["-DRK_GRAPHICS_VER=\\\"" + MAJOR_VERSION + "\\\""],
+
+    proprietary: true,
 
     cflags: [
         "-Wno-unused-function",
         "-Wno-unused-parameter",
         "-Wno-unused-variable",
-        "-DBOARD_VNDK_VERSION=27"
     ],
 
     relative_install_path: "hw",
+
+    vendor: true,
 
 }
 

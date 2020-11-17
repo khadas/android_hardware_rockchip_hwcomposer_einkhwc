@@ -72,6 +72,7 @@ EinkCompositorWorker::~EinkCompositorWorker() {
     close(timeline_fd_);
     timeline_fd_ = -1;
   }
+  munmap(ebc_buffer_base, EINK_FB_SIZE * 4);
   if(ebc_fd > 0){
     close(ebc_fd);
     ebc_fd = -1;
@@ -122,15 +123,17 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
       ALOGE("open /dev/ebc failed\n");
   }
   memset(&ebc_buf_info,0x00,sizeof(struct ebc_buf_info_t));
-  if(ioctl(ebc_fd, GET_EBC_BUFFER_INFO,&ebc_buf_info)!=0){
-      ALOGE("GET_EBC_BUFFER failed\n");
+  if(ioctl(ebc_fd, EBC_GET_BUFFER_INFO,&ebc_buf_info)!=0){
+      ALOGE("EBC_GET_BUFFER_INFO failed\n");
   }
-  ebc_buffer_base = mmap(0, ebc_buf_info.vir_width*ebc_buf_info.vir_height*3, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
+  ebc_buffer_base = mmap(0, EINK_FB_SIZE*4, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
   if (ebc_buffer_base == MAP_FAILED) {
       ALOGE("Error mapping the ebc buffer (%s)\n", strerror(errno));
   }
 
-  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+  // Due to RK356x RGA driver bug, gray16_buffer must to alloc w*h*4 instead of w*h*0.5
+  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
+
   gray256_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
   rgba_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
 
@@ -344,17 +347,17 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     src_t = 0;
     dst_l = 0;
     dst_t = 0;
-    if (ebc_buf_info.color_panel == 2) {
-      src_w = ebc_buf_info.fb_width/2;// - ((ebc_buf_info.fb_width/2) % 8);
-      src_h = ebc_buf_info.fb_height/2;// - ((ebc_buf_info.fb_height/2) % 2);
-      dst_w = ebc_buf_info.fb_width/2;// - ((ebc_buf_info.fb_width/2) % 8);
-      dst_h = ebc_buf_info.fb_height/2;// - ((ebc_buf_info.fb_height/2) % 2);
+    if (ebc_buf_info.panel_color == 2) {
+      src_w = ebc_buf_info.width/2;// - ((ebc_buf_info.width/2) % 8);
+      src_h = ebc_buf_info.height/2;// - ((ebc_buf_info.height/2) % 2);
+      dst_w = ebc_buf_info.width/2;// - ((ebc_buf_info.width/2) % 8);
+      dst_h = ebc_buf_info.height/2;// - ((ebc_buf_info.height/2) % 2);
     }
     else {
-      src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-      src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
-      dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-      dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+      src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+      src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
+      dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+      dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
     }
 
     if(dst_w < 0 || dst_h <0 )
@@ -407,6 +410,7 @@ int EinkCompositorWorker::Rgba888ToGray16(int *output_buffer,const buffer_handle
     src.fd = -1;
     dst.fd = -1;
 
+    int *src_vir = NULL;
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
     src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
     src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
@@ -419,16 +423,19 @@ int EinkCompositorWorker::Rgba888ToGray16(int *output_buffer,const buffer_handle
     src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
 #endif
 
+    gralloc_->lock(gralloc_, fb_handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                  0, 0, src_buf_w, src_buf_h, (void **)&src_vir);
+
     src_l = 0;
     src_t = 0;
-    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
 
 
     dst_l = 0;
     dst_t = 0;
-    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
 
 
     if(dst_w < 0 || dst_h <0 )
@@ -443,15 +450,23 @@ int EinkCompositorWorker::Rgba888ToGray16(int *output_buffer,const buffer_handle
     ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
         src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
         dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
-    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale : src hnd=%p,dst hnd=%p, format=0x%x, transform=0x%x\n",
-        (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle), HAL_PIXEL_FORMAT_RGBA_8888, rga_transform);
+    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale : src hnd=%p,dst vir=%p, format=0x%x, transform=0x%x\n",
+        (void*)fb_handle, (void*)(output_buffer), HAL_PIXEL_FORMAT_RGBA_8888, rga_transform);
 
-    src.hnd = fb_handle;
+    //src.hnd = fb_handle;
+    src.virAddr = src_vir;
     dst.virAddr = output_buffer;
+    dst.mmuFlag = 1;
+    src.mmuFlag = 1;
     src.rotation = rga_transform;
-
 		dst.dither.enable = 1;
 		dst.dither.mode = 0;
+
+    dst.dither.lut0_l = 0x3210;
+    dst.dither.lut0_h = 0x7654;
+    dst.dither.lut1_l = 0xba98;
+    dst.dither.lut1_h = 0xfedc;
+
 
     RockchipRga& rkRga(RockchipRga::get());
     ret = rkRga.RkRgaBlit(&src, &dst, NULL);
@@ -459,10 +474,15 @@ int EinkCompositorWorker::Rgba888ToGray16(int *output_buffer,const buffer_handle
         ALOGE("rgaRotateScale error : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
             src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
             dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
-        ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
-            strerror(errno), (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle));
+        ALOGE("rgaRotateScale error : %s,src hnd=%p,dst vir=%p",
+            strerror(errno), (void*)fb_handle, (void*)(output_buffer));
     }
     DumpLayer("yuv", dst.hnd);
+
+    if(src_vir != NULL){
+      gralloc_->unlock(gralloc_, fb_handle);
+      src_vir = NULL;
+    }
 
 
     return ret;
@@ -498,14 +518,14 @@ int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_
 
     src_l = 0;
     src_t = 0;
-    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
 
 
     dst_l = 0;
     dst_t = 0;
-    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
 
 
     if(dst_w < 0 || dst_h <0 )
@@ -575,14 +595,14 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
 
     src_l = 0;
     src_t = 0;
-    src_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    src_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
 
 
     dst_l = 0;
     dst_t = 0;
-    dst_w = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    dst_h = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
 
 
     if(dst_w < 0 || dst_h <0 )
@@ -630,7 +650,7 @@ int EinkCompositorWorker::DumpEinkSurface(int *buffer){
       static int DumpSurfaceCount = 0;
 
       sprintf(data_name,"/data/dump/dmlayer%d_%d_%d.bin", DumpSurfaceCount,
-               ebc_buf_info.vir_width, ebc_buf_info.vir_height);
+               ebc_buf_info.width, ebc_buf_info.height);
       DumpSurfaceCount++;
       FILE *file = fopen(data_name, "wb+");
       if (!file)
@@ -638,7 +658,7 @@ int EinkCompositorWorker::DumpEinkSurface(int *buffer){
           ALOGW("Could not open %s\n",data_name);
       } else{
           ALOGW("open %s and write ok\n",data_name);
-          fwrite(buffer, ebc_buf_info.vir_height * ebc_buf_info.vir_width >> 1 , 1, file);
+          fwrite(buffer, ebc_buf_info.height * ebc_buf_info.width >> 1 , 1, file);
           fclose(file);
 
       }
@@ -656,9 +676,9 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
 
   struct ebc_buf_info_t buf_info;
 
-  if(ioctl(ebc_fd, GET_EBC_BUFFER,&buf_info)!=0)
+  if(ioctl(ebc_fd, EBC_GET_BUFFER,&buf_info)!=0)
   {
-     ALOGE("GET_EBC_BUFFER failed\n");
+     ALOGE("EBC_GET_BUFFER failed\n");
     return -1;
   }
 
@@ -672,18 +692,17 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
       mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
   memcpy((void *)(vaddr_real + buf_info.offset), buffer,
-          buf_info.vir_height * buf_info.vir_width >> 1);
+          buf_info.height * buf_info.width >> 1);
 
-  if(ioctl(ebc_fd, SET_EBC_SEND_BUFFER,&buf_info)!=0)
+  if(ioctl(ebc_fd, EBC_SEND_BUFFER,&buf_info)!=0)
   {
-     ALOGE("SET_EBC_SEND_BUFFER failed\n");
+     ALOGE("EBC_SEND_BUFFER failed\n");
      return -1;
   }
   return 0;
 }
 
 
-static int not_fullmode_count = 0;
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
 
@@ -695,9 +714,9 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
 
   char* framebuffer_base = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
-  if (ebc_buf_info.color_panel == 2) {
-    framebuffer_wdith = ebc_buf_info.fb_width / 2;
-    framebuffer_height = ebc_buf_info.fb_height / 2;
+  if (ebc_buf_info.panel_color == 2) {
+    framebuffer_wdith = ebc_buf_info.width / 2;
+    framebuffer_height = ebc_buf_info.height / 2;
     output_format = HAL_PIXEL_FORMAT_RGBA_8888;
   } else{
 
@@ -731,7 +750,7 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
   gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&framebuffer_base);
 
-  Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.vir_width);
+  Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.width);
 
   if(rga_output_addr != NULL){
     gralloc_->unlock(gralloc_, src_hnd);
@@ -748,9 +767,9 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
 
   char* framebuffer_base = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
-  if (ebc_buf_info.color_panel == 1) {
-    framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  if (ebc_buf_info.panel_color == 1) {
+    framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
     output_format = HAL_PIXEL_FORMAT_RGBA_8888;
   } else{
     return -1;
@@ -798,8 +817,8 @@ int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
 
   char *gray256_addr = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
-  framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-  framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
+  framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
   output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
 
   DrmRgaBuffer &rga_buffer = rgaBuffers[0];
@@ -852,8 +871,8 @@ int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
 
   char *gray256_addr = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
-  framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-  framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
+  framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
   output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
 
   DrmRgaBuffer &rga_buffer = rgaBuffers[0];
@@ -902,8 +921,8 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
 
   char *gray256_addr = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
-  framebuffer_wdith = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-  framebuffer_height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+  framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
+  framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
   output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
 
   DrmRgaBuffer &rga_buffer = rgaBuffers[0];
@@ -934,7 +953,7 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
   gray256_addr = rga_output_addr;
 
   Region screen_region(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
-  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.vir_height, ebc_buf_info.vir_width, ebc_buf_info.width,screen_region);
+  gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width,screen_region);
 
 
   if(rga_output_addr != NULL){
@@ -963,7 +982,7 @@ int EinkCompositorWorker::A2Commit() {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
   int *gray16_buffer_bak = gray16_buffer;
   if(gLastEpdMode != EPD_A2)
-      epd_mode = EPD_BLACK_WHITE;
+      epd_mode = EPD_DU;
   else
       epd_mode = EPD_A2;
 
@@ -978,8 +997,8 @@ int EinkCompositorWorker::update_fullmode_num(){
 
   not_fullmode_num = atoi(value);
   if (not_fullmode_num != curr_not_fullmode_num) {
-    if(ioctl(ebc_fd, SET_EBC_NOT_FULL_NUM, &not_fullmode_num) != 0) {
-        ALOGE("SET_EBC_NOT_FULL_NUM failed\n");
+    if(ioctl(ebc_fd, EBC_SET_FULL_MODE_NUM, &not_fullmode_num) != 0) {
+        ALOGE("EBC_SET_FULL_MODE_NUM failed\n");
         return -1;
     }
     curr_not_fullmode_num = not_fullmode_num;
@@ -996,35 +1015,16 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
   }
 
   switch(gCurrentEpdMode){
-    case EPD_FULL:
-    case EPD_FULL_WIN:
-    case EPD_FULL_DITHER:
-    case EPD_AUTO:
-    case EPD_FULL_GL16:
-    case EPD_FULL_GLR16:
-    case EPD_FULL_GLD16:
-      ConvertToY4Dither(fb_handle);
-      Y4Commit(gCurrentEpdMode);
-      not_fullmode_count = 0;
-      break;
-    case EPD_PART:
-      ConvertToY4Dither(fb_handle);
-      Y4Commit(gCurrentEpdMode);
-      not_fullmode_count++;
-      break;
     case EPD_A2:
       ConvertToY1Dither(fb_handle);
       A2Commit();
-      not_fullmode_count++;
       break;
-    case EPD_BLOCK:
+    case EPD_SUSPEND:
        // release_wake_lock("show_advt_lock");
-      not_fullmode_count++;
       break;
-    case EPD_UNBLOCK:
+    case EPD_RESUME:
       ConvertToY4Dither(fb_handle);
       Y4Commit(gCurrentEpdMode);
-      not_fullmode_count = 0;
       break;
 //    case EPD_PART_EINK:
 //      ConvertToY8(fb_handle);
@@ -1032,16 +1032,14 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
 //    case EPD_COLOR_EINK1:
 //      ConvertToColorEink1(fb_handle);
 //      ColorCommit(gCurrentEpdMode);
-//      not_fullmode_count++;
 //      break;
 //    case EPD_COLOR_EINK1:
 //      ConvertToColorEink2(fb_handle);
 //      ColorCommit(gCurrentEpdMode);
-//      not_fullmode_count++;
 //      break;
     default:
-      //LOGE("jeffy part:%d", epdMode);
-      not_fullmode_count++;
+      ConvertToY4Dither(fb_handle);
+      Y4Commit(gCurrentEpdMode);
       break;
   }
   update_fullmode_num();

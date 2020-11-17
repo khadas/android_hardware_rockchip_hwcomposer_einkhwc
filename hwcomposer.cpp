@@ -39,15 +39,15 @@
 
 // #define ENABLE_DEBUG_LOG
 //#include <log/custom_log.h>
-#include "SkBitmap.h"
-#include "SkCanvas.h"
-#include "SkImageInfo.h"
-#include "SkStream.h"
-#include "SkImage.h"
-#include "SkEncodedImageFormat.h"
-#include "SkImageEncoder.h"
-#include "SkCodec.h"
-#include "SkData.h"
+//#include "SkBitmap.h"
+//#include "SkCanvas.h"
+//#include "SkImageInfo.h"
+//#include "SkStream.h"
+//#include "SkImage.h"
+//#include "SkEncodedImageFormat.h"
+//#include "SkImageEncoder.h"
+//#include "SkCodec.h"
+//#include "SkData.h"
 
 #include "drmhwcomposer.h"
 #include "einkcompositorworker.h"
@@ -109,51 +109,61 @@
 namespace android {
 #ifndef ANDROID_EINK_COMPOSITOR_WORKER_H_
 
-#define EPD_NULL            (-1)
-#define EPD_AUTO            (0)
-#define EPD_FULL            (1)
-#define EPD_A2              (2)
-#define EPD_PART            (3)
-#define EPD_FULL_DITHER     (4)
-#define EPD_RESET           (5)
-#define EPD_BLACK_WHITE     (6)
-#define EPD_BG            (7)
-#define EPD_BLOCK           (8)
-#define EPD_FULL_WIN        (9)
-#define EPD_OED_PART		(10)
-#define EPD_DIRECT_PART     (11)
-#define EPD_DIRECT_A2       (12)
-#define EPD_STANDBY			(13)
-#define EPD_POWEROFF        (14)
-#define EPD_NOPOWER        (15)
-#define EPD_AUTO_BG        (16)
-#define EPD_UNBLOCK        (17)
-#define EPD_PART_GL16     (18)
-#define EPD_PART_GLR16   (19)
-#define EPD_PART_GLD16   (20)
-#define EPD_FULL_GL16      (21)
-#define EPD_FULL_GLR16    (22)
-#define EPD_FULL_GLD16    (23)
+#define EINK_FB_SIZE		0x400000 /* 4M */
 
-/*android use struct*/
-struct ebc_buf_info{
-  int offset;
-  int epd_mode;
-  int height;
-  int width;
-  int vir_height;
-  int vir_width;
-  int fb_width;
-  int fb_height;
-  int color_panel;
-  int win_x1;
-  int win_y1;
-  int win_x2;
-  int win_y2;
-  int rotate;
-  int width_mm;
-  int height_mm;
-}__packed;
+/*
+ * IMPORTANT: Those values is corresponding to android hardware program,
+ * so *FORBID* to changes bellow values, unless you know what you're doing.
+ * And if you want to add new refresh modes, please appended to the tail.
+ */
+enum panel_refresh_mode {
+	EPD_NULL			= -1;
+	EPD_AUTO			= 0,
+	EPD_OVERLAY		= 1,
+	EPD_FULL_GC16		= 2,
+	EPD_FULL_GL16		= 3,
+	EPD_FULL_GLR16		= 4,
+	EPD_FULL_GLD16		= 5,
+	EPD_FULL_GCC16		= 6,
+	EPD_PART_GC16		= 7,
+	EPD_PART_GL16		= 8,
+	EPD_PART_GLR16		= 9,
+	EPD_PART_GLD16		= 10,
+	EPD_PART_GCC16		= 11,
+	EPD_A2				= 12,
+	EPD_A2_DITHER		= 13,
+	EPD_DU				= 14,
+	EPD_RESET			= 15,
+	EPD_SUSPEND		= 16,
+	EPD_RESUME			= 17,
+	EPD_POWER_OFF		= 18,
+	EPD_FULL_DIRECT	= 19,
+	EPD_PART_DIRECT	= 20,
+	EPD_A2_DIRECT		= 21,
+	EPD_DU_DIRECT		= 22,
+	EPD_AUTO_DIRECT	= 23,
+	EPD_OVERLAY_DIRECT	= 24,
+	EPD_PART_EINK		= 25,
+	EPD_FULL_EINK		= 26,
+};
+
+/*
+ * IMPORTANT: android hardware use struct, so *FORBID* to changes this, unless you know what you're doing.
+ */
+struct ebc_buf_info {
+	int offset;
+	int epd_mode;
+	int height;
+	int width;
+	int panel_color;
+	int win_x1;
+	int win_y1;
+	int win_x2;
+	int win_y2;
+	int width_mm;
+	int height_mm;
+};
+
 struct win_coordinate{
 	int x1;
 	int x2;
@@ -163,11 +173,15 @@ struct win_coordinate{
 
 
 #define USE_RGA 1
-
-#define GET_EBC_BUFFER 0x7000
-#define SET_EBC_SEND_BUFFER 0x7001
-#define GET_EBC_BUFFER_INFO 0x7003
-#define SET_EBC_NOT_FULL_NUM 0x7006
+/*
+ * ebc system ioctl command
+ */
+#define EBC_GET_BUFFER			(0x7000)
+#define EBC_SEND_BUFFER			(0x7001)
+#define EBC_GET_BUFFER_INFO		(0x7002)
+#define EBC_SET_FULL_MODE_NUM	(0x7003)
+#define EBC_ENABLE_OVERLAY		(0x7004)
+#define EBC_DISABLE_OVERLAY		(0x7005)
 
 #endif
 
@@ -191,9 +205,9 @@ int ebc_fd = -1;
 void *ebc_buffer_base = NULL;
 struct ebc_buf_info_t ebc_buf_info;
 
-static int gLastEpdMode = EPD_PART;
-static int gCurrentEpdMode = EPD_PART;
-static int gResetEpdMode = EPD_PART;
+static int gLastEpdMode = EPD_PART_GC16;
+static int gCurrentEpdMode = EPD_PART_GC16;
+static int gResetEpdMode = EPD_PART_GC16;
 static Region gLastA2Region;
 static Region gSavedUpdateRegion;
 
@@ -1410,9 +1424,9 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
 
   struct ebc_buf_info_t buf_info;
 
-  if(ioctl(ebc_fd, GET_EBC_BUFFER,&buf_info)!=0)
+  if(ioctl(ebc_fd, EBC_GET_BUFFER,&buf_info)!=0)
   {
-     ALOGE("GET_EBC_BUFFER failed\n");
+     ALOGE("EBC_GET_BUFFER failed\n");
     return -1;
   }
 
@@ -1432,7 +1446,7 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
       static int DumpSurfaceCount = 0;
 
       sprintf(data_name,"/data/dump/dmlayer%d_%d_%d.bin", DumpSurfaceCount,
-               buf_info.vir_width, buf_info.vir_height);
+               buf_info.width, buf_info.height);
       DumpSurfaceCount++;
       FILE *file = fopen(data_name, "wb+");
       if (!file)
@@ -1440,7 +1454,7 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
           ALOGW("Could not open %s\n",data_name);
       } else{
           ALOGW("open %s and write ok\n",data_name);
-          fwrite(buffer, buf_info.vir_height * buf_info.vir_width >> 1 , 1, file);
+          fwrite(buffer, buf_info.height * buf_info.width >> 1 , 1, file);
           fclose(file);
 
       }
@@ -1454,11 +1468,11 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
       mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
   memcpy((void *)(vaddr_real + buf_info.offset), buffer,
-          buf_info.vir_height * buf_info.vir_width >> 1);
+          buf_info.height * buf_info.width >> 1);
 
-  if(ioctl(ebc_fd, SET_EBC_SEND_BUFFER,&buf_info)!=0)
+  if(ioctl(ebc_fd, EBC_SEND_BUFFER,&buf_info)!=0)
   {
-     ALOGE("SET_EBC_SEND_BUFFER failed\n");
+     ALOGE("EBC_SEND_BUFFER failed\n");
      return -1;
   }
   return 0;
@@ -1479,7 +1493,7 @@ void hwc_free_buffer(hwc_drm_display_t *hd) {
     }
 }
 #endif
-
+#if 0
 bool decode_image_file(const char* filename, SkBitmap* bitmap,
                                SkColorType colorType = kN32_SkColorType,
                                bool requireUnpremul = false) {
@@ -1535,14 +1549,14 @@ int hwc_post_epd_logo(const char src_path[]) {
     void *image_addr;
     void *image_new_addr;
 
-    if (ebc_buf_info.color_panel == 1) {
+    if (ebc_buf_info.panel_color == 1) {
         image_new_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
         image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
         drawLogoPic(src_path, (void *)image_new_addr, ebc_buf_info.width, ebc_buf_info.height);
 	 free(image_new_addr);
 	 image_new_addr = NULL;
     }
-    else if (ebc_buf_info.color_panel == 2) {
+    else if (ebc_buf_info.panel_color == 2) {
         image_addr = (char *)malloc((ebc_buf_info.width/2) * (ebc_buf_info.height/2) * 4);
         drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width/2, ebc_buf_info.height/2);
     }
@@ -1551,30 +1565,30 @@ int hwc_post_epd_logo(const char src_path[]) {
         drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height);
     }
 
-    gray16_buffer = (int *)malloc(ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
+    gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
     int *gray16_buffer_bak = gray16_buffer;
     char isNeedWhiteScreenWithStandby[PROPERTY_VALUE_MAX] = "n";
     /* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
     property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
     if (strcmp(isNeedWhiteScreenWithStandby, "y") == 0) {
-        memset(gray16_buffer_bak, 0xff, ebc_buf_info.vir_width * ebc_buf_info.vir_height >> 1);
+        memset(gray16_buffer_bak, 0xff, ebc_buf_info.width * ebc_buf_info.height >> 1);
         ALOGD_IF(log_level(DBG_DEBUG), "%s,line = %d", __FUNCTION__, __LINE__);
         //EPD post
         Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-        hwc_post_epd(gray16_buffer_bak, rect, EPD_BLACK_WHITE);
+        hwc_post_epd(gray16_buffer_bak, rect, EPD_DU);
     }
 
-    if (ebc_buf_info.color_panel == 2)
-        Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/2, ebc_buf_info.width/2, ebc_buf_info.vir_width);
+    if (ebc_buf_info.panel_color == 2)
+        Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height/2, ebc_buf_info.width/2, ebc_buf_info.width);
 
     //EPD post
-    gCurrentEpdMode = EPD_BLOCK;
+    gCurrentEpdMode = EPD_SUSPEND;
     Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-    if (gPowerMode == EPD_POWEROFF)
-      hwc_post_epd(gray16_buffer, rect, EPD_POWEROFF);
+    if (gPowerMode == EPD_POWER_OFF)
+      hwc_post_epd(gray16_buffer, rect, EPD_POWER_OFF);
     else
-      hwc_post_epd(gray16_buffer, rect, EPD_BLOCK);
-    gCurrentEpdMode = EPD_BLOCK;
+      hwc_post_epd(gray16_buffer, rect, EPD_SUSPEND);
+    gCurrentEpdMode = EPD_SUSPEND;
 
     free(image_addr);
     image_addr = NULL;
@@ -1584,101 +1598,22 @@ int hwc_post_epd_logo(const char src_path[]) {
 
     return 0;
 }
-
+#endif
 static int hwc_handle_eink_mode(int mode){
 
-  if(gPowerMode == EPD_POWEROFF || gPowerMode == EPD_STANDBY || gPowerMode == EPD_NOPOWER)
+  if(gPowerMode == EPD_POWER_OFF || gPowerMode == EPD_SUSPEND)
   {
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line=%d gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,gPowerMode,gCurrentEpdMode);
-      gCurrentEpdMode = EPD_BLOCK;
+      gCurrentEpdMode = EPD_SUSPEND;
       return 0;
   }
 
-  if(gPowerMode == EPD_UNBLOCK){
-      gCurrentEpdMode = EPD_UNBLOCK;
+  if(gPowerMode == EPD_RESUME){
+      gCurrentEpdMode = EPD_RESUME;
       gPowerMode = EPD_NULL;
       return 0;
   }else{
-      switch (mode) {
-        case HWC_POWER_MODE_EPD_NULL:
-          gCurrentEpdMode = EPD_NULL;
-          break;
-        case HWC_POWER_MODE_EPD_AUTO:
-          gCurrentEpdMode = EPD_AUTO;
-          gResetEpdMode = EPD_AUTO;
-          break;
-        case HWC_POWER_MODE_EPD_FULL:
-          gCurrentEpdMode = EPD_FULL;
-          break;
-        case HWC_POWER_MODE_EPD_A2:
-          gCurrentEpdMode = EPD_A2;
-          break;
-        case HWC_POWER_MODE_EPD_PART:
-          gCurrentEpdMode = EPD_PART;
-          gResetEpdMode = EPD_PART;
-          break;
-        case HWC_POWER_MODE_EPD_FULL_DITHER:
-          gCurrentEpdMode = EPD_FULL_DITHER;
-          break;
-        case HWC_POWER_MODE_EPD_RESET:
-          gCurrentEpdMode = EPD_RESET;
-          break;
-        case HWC_POWER_MODE_EPD_BLACK_WHITE:
-          gCurrentEpdMode = EPD_BLACK_WHITE;
-          break;
-        case HWC_POWER_MODE_EPD_BG:
-          gCurrentEpdMode = EPD_BG;
-          break;
-        case HWC_POWER_MODE_EPD_BLOCK:
-          gCurrentEpdMode = EPD_BLOCK;
-          break;
-        case HWC_POWER_MODE_EPD_FULL_WIN:
-          gCurrentEpdMode = EPD_FULL_WIN;
-          break;
-        case HWC_POWER_MODE_EPD_OED_PART:
-          gCurrentEpdMode = EPD_OED_PART;
-          gResetEpdMode = EPD_OED_PART;
-          break;
-        case HWC_POWER_MODE_EPD_DIRECT_PART:
-          gCurrentEpdMode = EPD_DIRECT_PART;
-          break;
-        case HWC_POWER_MODE_EPD_DIRECT_A2:
-          gCurrentEpdMode = EPD_DIRECT_A2;
-          break;
-        case HWC_POWER_MODE_EPD_STANDBY:
-          //gCurrentEpdMode = EPD_STANDBY;
-          //hwc_post_epd_logo(STANDBY_IMAGE_PATH);
-          break;
-        case HWC_POWER_MODE_EPD_POWEROFF:
-          //gCurrentEpdMode = EPD_POWEROFF;
-          //hwc_post_epd_logo(POWEROFF_IMAGE_PATH);
-          break;
-        case HWC_POWER_MODE_EPD_NOPOWER:
-          //gCurrentEpdMode = EPD_NOPOWER;
-          //hwc_post_epd_logo(NOPOWER_IMAGE_PATH);
-          break;
-        case HWC_POWER_MODE_EPD_AUTO_BG:
-          gCurrentEpdMode = EPD_AUTO_BG;
-          break;
-        case HWC_POWER_MODE_EPD_PART_GL16:
-          gCurrentEpdMode = EPD_PART_GL16;
-          break;
-	 case HWC_POWER_MODE_EPD_PART_GLR16:
-          gCurrentEpdMode = EPD_PART_GLR16;
-          break;
-        case HWC_POWER_MODE_EPD_PART_GLD16:
-          gCurrentEpdMode = EPD_PART_GLD16;
-          break;
-	 case HWC_POWER_MODE_EPD_FULL_GL16:
-          gCurrentEpdMode = EPD_FULL_GL16;
-          break;
-        case HWC_POWER_MODE_EPD_FULL_GLR16:
-          gCurrentEpdMode = EPD_FULL_GLR16;
-          break;
-	 case HWC_POWER_MODE_EPD_FULL_GLD16:
-          gCurrentEpdMode = EPD_FULL_GLD16;
-          break;
-      };
+      gCurrentEpdMode = mode;
   }
   return 0;
 }
@@ -1698,7 +1633,7 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   //Handle eink mode.
   ret = hwc_handle_eink_mode(requestEpdMode);
 
-  if(gCurrentEpdMode != EPD_BLOCK){
+  if(gCurrentEpdMode != EPD_SUSPEND){
     for (size_t i = 0; i < num_displays; ++i) {
         hwc_display_contents_1_t *dc = sf_display_contents[i];
 
@@ -1760,34 +1695,34 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
 
   switch (mode) {
     case HWC_POWER_MODE_OFF:
-      gPowerMode = EPD_POWEROFF;
+      gPowerMode = EPD_POWER_OFF;
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
-      gCurrentEpdMode = EPD_BLOCK;
+      gCurrentEpdMode = EPD_SUSPEND;
 
       char nopower_flag[255];
       property_get("sys.shutdown.nopower",nopower_flag, "0");
       if(atoi(nopower_flag) == 1){
         if (!access(NOPOWER_IMAGE_PATH_USER, R_OK)){
-          hwc_post_epd_logo(NOPOWER_IMAGE_PATH_USER);
+          //hwc_post_epd_logo(NOPOWER_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,NOPOWER_IMAGE_PATH_USER);
         }else{
-          hwc_post_epd_logo(NOPOWER_IMAGE_PATH_DEFAULT);
+          //hwc_post_epd_logo(NOPOWER_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,NOPOWER_IMAGE_PATH_USER,NOPOWER_IMAGE_PATH_DEFAULT);
         }
       } else {
         if (!access(POWEROFF_IMAGE_PATH_USER, R_OK)){
-          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
+          //hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
         }else{
-          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
+          //hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER,POWEROFF_IMAGE_PATH_DEFAULT);
         }
       }
       break;
     /* We can't support dozing right now, so go full on */
     case HWC_POWER_MODE_DOZE:
-      gPowerMode = EPD_STANDBY;
-      gCurrentEpdMode = EPD_BLOCK;
+      gPowerMode = EPD_SUSPEND;
+      gCurrentEpdMode = EPD_SUSPEND;
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
 
       char standby_nopower_flag[255];
@@ -1796,34 +1731,34 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       property_get("sys.standby.charge",standby_charge_flag, "0");
       if (atoi(standby_nopower_flag) == 1){
         if (!access(STANDBY_NOPOWER_PATH_USER, R_OK)){
-          hwc_post_epd_logo(STANDBY_NOPOWER_PATH_USER);
+          //hwc_post_epd_logo(STANDBY_NOPOWER_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_NOPOWER_PATH_USER);
         }else{
-          hwc_post_epd_logo(STANDBY_NOPOWER_PATH_DEFAULT);
+          //hwc_post_epd_logo(STANDBY_NOPOWER_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_NOPOWER_PATH_USER,STANDBY_NOPOWER_PATH_DEFAULT);
         }
       } else if (atoi(standby_charge_flag) == 1){
         if (!access(STANDBY_CHARGE_PATH_USER, R_OK)){
-          hwc_post_epd_logo(STANDBY_CHARGE_PATH_USER);
+          //hwc_post_epd_logo(STANDBY_CHARGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER);
         }else{
-          hwc_post_epd_logo(STANDBY_CHARGE_PATH_DEFAULT);
+          //hwc_post_epd_logo(STANDBY_CHARGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER,STANDBY_CHARGE_PATH_DEFAULT);
         }
       } else {
         if (!access(STANDBY_IMAGE_PATH_USER, R_OK)){
-          hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
+          //hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER);
         }else{
-          hwc_post_epd_logo(STANDBY_IMAGE_PATH_DEFAULT);
+          //hwc_post_epd_logo(STANDBY_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER,STANDBY_IMAGE_PATH_DEFAULT);
         }
       }
       break;
     case HWC_POWER_MODE_DOZE_SUSPEND:
     case HWC_POWER_MODE_NORMAL:
-      gPowerMode = EPD_UNBLOCK;
-      gCurrentEpdMode = EPD_FULL;
+      gPowerMode = EPD_RESUME;
+      gCurrentEpdMode = EPD_FULL_GC16;
       not_fullmode_count = 50;
       break;
   }
@@ -1868,13 +1803,13 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
     return 0;
 
   uint32_t width = 0, height = 0 , vrefresh = 0 ;
-  if (ebc_buf_info.color_panel == 2) {
-    width = ebc_buf_info.fb_width/2;// - ((ebc_buf_info.fb_width/2) % 8);
-    height = ebc_buf_info.fb_height/2;// - ((ebc_buf_info.fb_height/2) % 2);
+  if (ebc_buf_info.panel_color == 2) {
+    width = ebc_buf_info.width/2;// - ((ebc_buf_info.width/2) % 8);
+    height = ebc_buf_info.height/2;// - ((ebc_buf_info.height/2) % 2);
   }
   else {
-    width = ebc_buf_info.fb_width - (ebc_buf_info.fb_width % 8);
-    height = ebc_buf_info.fb_height - (ebc_buf_info.fb_height % 2);
+    width = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    height = ebc_buf_info.height - (ebc_buf_info.height % 2);
   }
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;
@@ -2050,10 +1985,10 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
       ALOGE("open /dev/ebc failed\n");
   }
 
-  if(ioctl(ebc_fd, GET_EBC_BUFFER_INFO,&ebc_buf_info)!=0){
-      ALOGE("GET_EBC_BUFFER failed\n");
+  if(ioctl(ebc_fd, EBC_GET_BUFFER_INFO,&ebc_buf_info)!=0){
+      ALOGE("EBC_GET_BUFFER_INFO failed\n");
   }
-  ebc_buffer_base = mmap(0, ebc_buf_info.vir_width*ebc_buf_info.vir_height*3, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
+  ebc_buffer_base = mmap(0, EINK_FB_SIZE*4, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
   if (ebc_buffer_base == MAP_FAILED) {
       ALOGE("Error mapping the ebc buffer (%s)\n", strerror(errno));
   }

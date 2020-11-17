@@ -163,11 +163,9 @@ class EinkCompositorWorker : public Worker {
 
   int CreateNextTimelineFence();
   int FinishComposition(int timeline);
-  int Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
+  int Rgba888ToGray256ByRga(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
-#if RK356X
-  int Rgba888ToGray16(int *output_buffer,const buffer_handle_t          &fb_handle);
-#endif
+  int Rgba888ToGray16ByRga(int *output_buffer,const buffer_handle_t          &fb_handle);
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int ConvertToColorEink1(const buffer_handle_t &fb_handle);
   int ConvertToColorEink2(const buffer_handle_t &fb_handle);
@@ -217,7 +215,7 @@ class EinkCompositorWorker : public Worker {
   int *rgba_new_buffer = NULL;
   int *gray256_new_buffer = NULL;
   char* rga_output_addr = NULL;
-
+  bool rgba_to_y4_by_rga = false;
 };
 }
 

@@ -40,6 +40,7 @@
 
 #include "einkcompositorworker.h"
 #include "worker.h"
+#include "hwc_util.h"
 
 #include <errno.h>
 #include <stdlib.h>
@@ -394,8 +395,7 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     return ret;
 }
 
-#if RK356X
-int EinkCompositorWorker::Rgba888ToGray16(int *output_buffer,const buffer_handle_t          &fb_handle) {
+int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_handle_t          &fb_handle) {
     ATRACE_CALL();
     int ret = 0;
     int rga_transform = 0;
@@ -488,8 +488,7 @@ int EinkCompositorWorker::Rgba888ToGray16(int *output_buffer,const buffer_handle
     return ret;
 }
 
-#endif
-int EinkCompositorWorker::Rgba888ToGray256(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle) {
+int EinkCompositorWorker::Rgba888ToGray256ByRga(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle) {
     ATRACE_CALL();
     int ret = 0;
     int rga_transform = 0;
@@ -837,7 +836,7 @@ int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
   format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
   size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
 
-  ret = Rgba888ToGray256(rga_buffer, fb_handle);
+  ret = Rgba888ToGray256ByRga(rga_buffer, fb_handle);
   if (ret) {
     ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
     return ret;
@@ -859,57 +858,57 @@ int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
 
-#if RK356X
 
-  int ret = Rgba888ToGray16(gray16_buffer, fb_handle);
-  if (ret) {
-    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
-    return ret;
+  rgba_to_y4_by_rga = hwc_get_int_property("sys.eink.rgba2y4_by_rga","0") > 0;
+
+  if(rgba_to_y4_by_rga){
+    int ret = Rgba888ToGray16ByRga(gray16_buffer, fb_handle);
+    if (ret) {
+      ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+      return ret;
+    }
+    return 0;
+  }else{
+    char *gray256_addr = NULL;
+    int framebuffer_wdith, framebuffer_height, output_format, ret;
+    framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
+    output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+
+    DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+    if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
+      ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
+      return -ENOMEM;
+    }
+
+    int width,height,stride,byte_stride,format,size;
+    buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
+
+    width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
+    height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
+    stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
+    byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
+    format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
+    size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+
+    ret = Rgba888ToGray256ByRga(rga_buffer, fb_handle);
+    if (ret) {
+      ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+      return ret;
+    }
+
+    gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                  0, 0, width, height, (void **)&rga_output_addr);
+
+    gray256_addr = rga_output_addr;
+    gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+
+    if(rga_output_addr != NULL){
+      gralloc_->unlock(gralloc_, src_hnd);
+      rga_output_addr = NULL;
+    }
+
   }
-  return 0;
-#else
-
-  char *gray256_addr = NULL;
-  int framebuffer_wdith, framebuffer_height, output_format, ret;
-  framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
-  framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
-  output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
-
-  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
-  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
-    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
-    return -ENOMEM;
-  }
-
-  int width,height,stride,byte_stride,format,size;
-  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
-
-  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
-
-  ret = Rgba888ToGray256(rga_buffer, fb_handle);
-  if (ret) {
-    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
-    return ret;
-  }
-
-  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
-                0, 0, width, height, (void **)&rga_output_addr);
-
-  gray256_addr = rga_output_addr;
-  gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-
-  if(rga_output_addr != NULL){
-    gralloc_->unlock(gralloc_, src_hnd);
-    rga_output_addr = NULL;
-  }
-
-
-#endif
   return 0;
 }
 
@@ -941,7 +940,7 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
   format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
   size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
 
-  ret = Rgba888ToGray256(rga_buffer, fb_handle);
+  ret = Rgba888ToGray256ByRga(rga_buffer, fb_handle);
   if (ret) {
     ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
     return ret;

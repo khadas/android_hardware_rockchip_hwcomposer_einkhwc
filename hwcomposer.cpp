@@ -185,18 +185,17 @@ struct win_coordinate{
 
 #endif
 
+#define POWEROFF_IMAGE_PATH_USER "/data/misc/poweroff.bmp"
+#define NOPOWER_IMAGE_PATH_USER "/data/misc/nopower.bmp"
+#define STANDBY_IMAGE_PATH_USER "/data/misc/standby.bmp"
+#define STANDBY_NOPOWER_PATH_USER "/data/misc/standby_nopower.bmp"
+#define STANDBY_CHARGE_PATH_USER "/data/misc/standby_charge.bmp"
 
-#define POWEROFF_IMAGE_PATH_USER "/data/misc/poweroff.jpg"
-#define NOPOWER_IMAGE_PATH_USER "/data/misc/nopower.jpg"
-#define STANDBY_IMAGE_PATH_USER "/data/misc/standby.jpg"
-#define STANDBY_NOPOWER_PATH_USER "/data/misc/standby_nopower.jpg"
-#define STANDBY_CHARGE_PATH_USER "/data/misc/standby_charge.jpg"
-
-#define POWEROFF_IMAGE_PATH_DEFAULT "/vendor/media/poweroff.jpg"
-#define NOPOWER_IMAGE_PATH_DEFAULT "/vendor/media/nopower.jpg"
-#define STANDBY_IMAGE_PATH_DEFAULT "/vendor/media/standby.jpg"
-#define STANDBY_NOPOWER_PATH_DEFAULT "/vendor/media/standby_nopower.jpg"
-#define STANDBY_CHARGE_PATH_DEFAULT "/vendor/media/standby_charge.jpg"
+#define POWEROFF_IMAGE_PATH_DEFAULT "/vendor/media/poweroff.bmp"
+#define NOPOWER_IMAGE_PATH_DEFAULT "/vendor/media/nopower.bmp"
+#define STANDBY_IMAGE_PATH_DEFAULT "/vendor/media/standby.bmp"
+#define STANDBY_NOPOWER_PATH_DEFAULT "/vendor/media/standby_nopower.bmp"
+#define STANDBY_CHARGE_PATH_DEFAULT "/vendor/media/standby_charge.bmp"
 
 int gPixel_format = 24;
 
@@ -1599,6 +1598,228 @@ int hwc_post_epd_logo(const char src_path[]) {
     return 0;
 }
 #endif
+
+int get_buf_from_bmp24(const char path[], void *buf, int size) {
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+        ALOGE("Could not open %s\n", path);
+        return -EINVAL;
+    }
+
+    fseek(file, 54, SEEK_SET);
+    fread(buf, size, 1, file);
+    fclose(file);
+    file = NULL;
+
+    return 0;
+}
+
+int get_width_and_height_from_bmp24(const char path[], int &width, int &height) {
+    int BmpSize;
+    char *buf = NULL;
+
+    BmpSize = 54;
+
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+        ALOGE("Could not open %s\n", path);
+        return -1;
+    }
+
+    buf = (char *)malloc(54);
+    fread(buf, BmpSize, 1, file);
+
+    if (buf[0] != 0x42 && buf[1] != 0x4d) {
+        ALOGE("error! bmp is not 'BM', [%d, %d]\n", buf[0], buf[1]);
+        goto ERR;
+    }
+
+    if (buf[28] != 0x18) {
+        ALOGE("only support BMP24\n");
+        goto ERR;
+    }
+
+    width  = buf[18];
+    width |= buf[19] << 8;
+    width |= buf[20] << 16;
+    width |= buf[21] << 24;
+
+    height  = buf[22];
+    height |= buf[23] << 8;
+    height |= buf[24] << 16;
+    height |= buf[25] << 24;
+
+    if (width == 0 || height == 0) {
+        ALOGE("Width and height cannot be 0.\n");
+        goto ERR;
+    }
+
+    free(buf);
+    buf = NULL;
+    fclose(file);
+    file = NULL;
+
+    return 0;
+
+ERR:
+    free(buf);
+    buf = NULL;
+    fclose(file);
+    file = NULL;
+
+    return -1;
+}
+
+int copy_rgb_from_bmp24(char *buf, char *bmp_buf, int width, int height) {
+    int i = 0, j = 0, size = 0;
+
+    size = width*height*3;
+
+    for (i = 0; i < height; i++) {
+        for (j = 0; j < width; j++) {
+            buf[(i*width*3) + j*3 + 0] = bmp_buf[(size - (i+1)*width*3) + j*3 + 2]; //R
+            buf[(i*width*3) + j*3 + 1] = bmp_buf[(size - (i+1)*width*3) + j*3 + 1]; //G
+            buf[(i*width*3) + j*3 + 2] = bmp_buf[(size - (i+1)*width*3) + j*3 + 0]; //B
+        }
+    }
+
+    return 0;
+}
+
+void drawLogoPic(const char src_path[], void* buf, int width, int height) {
+    int bmpSize = 0;
+    char *bmp_buf = NULL;
+
+    bmpSize = width*height*3;
+    bmp_buf = (char *)malloc(bmpSize);
+    /* get bmp to src */
+    get_buf_from_bmp24(src_path, bmp_buf,bmpSize);
+    copy_rgb_from_bmp24((char *)buf, (char*)bmp_buf, width, height);
+
+    free(bmp_buf);
+    bmp_buf = NULL;
+}
+
+int Rgb888ToGray16ByRga(char *dst_buf,int *src_buf,int  fb_height, int fb_width, int vir_width) {
+    int ret = 0;
+    rga_info_t src;
+    rga_info_t dst;
+
+    RockchipRga& rkRga(RockchipRga::get());
+
+    memset(&src, 0x00, sizeof(src));
+    memset(&dst, 0x00, sizeof(dst));
+
+    src.sync_mode = RGA_BLIT_SYNC;
+    rga_set_rect(&src.rect, 0, 0, fb_width, fb_height, vir_width, fb_height, RK_FORMAT_RGB_888);
+    rga_set_rect(&dst.rect, 0, 0, fb_width, fb_height, vir_width, fb_height, RK_FORMAT_Y4);
+
+    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+        src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+        dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+
+    //src.hnd = fb_handle;
+    src.virAddr = src_buf;
+    dst.virAddr = dst_buf;
+    dst.mmuFlag = 1;
+    src.mmuFlag = 1;
+    src.rotation = 0;
+    dst.dither.enable = 1;
+    dst.dither.mode = 0;
+
+    dst.dither.lut0_l = 0x3210;
+    dst.dither.lut0_h = 0x7654;
+    dst.dither.lut1_l = 0xba98;
+    dst.dither.lut1_h = 0xfedc;
+
+    ret = rkRga.RkRgaBlit(&src, &dst, NULL);
+    if(ret) {
+        ALOGE("rgaRotateScale error : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+            src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+            dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+    }
+
+    return ret;
+}
+
+void white_screen() {
+    int *white_buf = NULL;
+
+    /* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
+    char isNeedWhiteScreenWithStandby[PROPERTY_VALUE_MAX] = "n";
+    property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
+
+    if (strcmp(isNeedWhiteScreenWithStandby, "y") == 0) {
+        white_buf = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+        if (white_buf == NULL) {
+            ALOGE("white screen malloc error!");
+            return;
+        }
+        memset(white_buf, 0xff, ebc_buf_info.width * ebc_buf_info.height >> 1);
+        ALOGD_IF(log_level(DBG_DEBUG), "%s,line = %d", __FUNCTION__, __LINE__);
+        //EPD post
+        Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+        hwc_post_epd(white_buf, rect, EPD_FULL_GC16);
+    }
+
+    free(white_buf);
+    white_buf = NULL;
+}
+
+int hwc_post_epd_logo(const char src_path[]) {
+    int *gray16_buffer;
+    int bmpWidth = 0, bmpHeight = 0;
+    int ret = 0;
+    void *image_addr;
+
+    ret = get_width_and_height_from_bmp24(src_path, bmpWidth, bmpHeight);
+    if (ret < 0) {
+        ALOGE("Get width and height from bmp24 error!");
+        white_screen();
+        return -1;
+     } else if (bmpWidth != ebc_buf_info.width || bmpHeight != ebc_buf_info.height) {
+        ALOGE("bmp size error! bmpWidth = %d, bmpHeight = %d\n", bmpWidth, bmpHeight);
+        white_screen();
+        return -1;
+    }
+
+    image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 3);
+    memset(image_addr, 0x0, ebc_buf_info.width * ebc_buf_info.height * 3);
+    drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height);
+
+    gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+    int *gray16_buffer_bak = gray16_buffer;
+    char isNeedWhiteScreenWithStandby[PROPERTY_VALUE_MAX] = "n";
+    /* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
+    property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
+    if (strcmp(isNeedWhiteScreenWithStandby, "y") == 0) {
+        memset(gray16_buffer_bak, 0xff, ebc_buf_info.width * ebc_buf_info.height >> 1);
+        ALOGD_IF(log_level(DBG_DEBUG), "%s,line = %d", __FUNCTION__, __LINE__);
+        //EPD post
+        Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+        hwc_post_epd(gray16_buffer_bak, rect, EPD_DU);
+    }
+
+    Rgb888ToGray16ByRga((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+
+    //EPD post
+    gCurrentEpdMode = EPD_SUSPEND;
+    Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+    if (gPowerMode == EPD_POWER_OFF)
+      hwc_post_epd(gray16_buffer, rect, EPD_POWER_OFF);
+    else
+      hwc_post_epd(gray16_buffer, rect, EPD_SUSPEND);
+    gCurrentEpdMode = EPD_SUSPEND;
+
+    free(image_addr);
+    image_addr = NULL;
+    free(gray16_buffer);
+    gray16_buffer = NULL;
+    gray16_buffer_bak = NULL;
+
+    return 0;
+}
+
 static int hwc_handle_eink_mode(int mode){
 
   if(gPowerMode == EPD_POWER_OFF || gPowerMode == EPD_SUSPEND)
@@ -1703,18 +1924,18 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       property_get("sys.shutdown.nopower",nopower_flag, "0");
       if(atoi(nopower_flag) == 1){
         if (!access(NOPOWER_IMAGE_PATH_USER, R_OK)){
-          //hwc_post_epd_logo(NOPOWER_IMAGE_PATH_USER);
+          hwc_post_epd_logo(NOPOWER_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,NOPOWER_IMAGE_PATH_USER);
         }else{
-          //hwc_post_epd_logo(NOPOWER_IMAGE_PATH_DEFAULT);
+          hwc_post_epd_logo(NOPOWER_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,NOPOWER_IMAGE_PATH_USER,NOPOWER_IMAGE_PATH_DEFAULT);
         }
       } else {
         if (!access(POWEROFF_IMAGE_PATH_USER, R_OK)){
-          //hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
+          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
         }else{
-          //hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
+          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER,POWEROFF_IMAGE_PATH_DEFAULT);
         }
       }
@@ -1731,26 +1952,26 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       property_get("sys.standby.charge",standby_charge_flag, "0");
       if (atoi(standby_nopower_flag) == 1){
         if (!access(STANDBY_NOPOWER_PATH_USER, R_OK)){
-          //hwc_post_epd_logo(STANDBY_NOPOWER_PATH_USER);
+          hwc_post_epd_logo(STANDBY_NOPOWER_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_NOPOWER_PATH_USER);
         }else{
-          //hwc_post_epd_logo(STANDBY_NOPOWER_PATH_DEFAULT);
+          hwc_post_epd_logo(STANDBY_NOPOWER_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_NOPOWER_PATH_USER,STANDBY_NOPOWER_PATH_DEFAULT);
         }
       } else if (atoi(standby_charge_flag) == 1){
         if (!access(STANDBY_CHARGE_PATH_USER, R_OK)){
-          //hwc_post_epd_logo(STANDBY_CHARGE_PATH_USER);
+          hwc_post_epd_logo(STANDBY_CHARGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER);
         }else{
-          //hwc_post_epd_logo(STANDBY_CHARGE_PATH_DEFAULT);
+          hwc_post_epd_logo(STANDBY_CHARGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER,STANDBY_CHARGE_PATH_DEFAULT);
         }
       } else {
         if (!access(STANDBY_IMAGE_PATH_USER, R_OK)){
-          //hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
+          hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER);
         }else{
-          //hwc_post_epd_logo(STANDBY_IMAGE_PATH_DEFAULT);
+          hwc_post_epd_logo(STANDBY_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER,STANDBY_IMAGE_PATH_DEFAULT);
         }
       }

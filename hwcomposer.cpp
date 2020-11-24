@@ -1725,13 +1725,13 @@ int Rgb888ToGray16ByRga(char *dst_buf,int *src_buf,int  fb_height, int fb_width,
     dst.mmuFlag = 1;
     src.mmuFlag = 1;
     src.rotation = 0;
-    dst.dither.enable = 1;
+    dst.dither.enable = 0;
     dst.dither.mode = 0;
 
-    dst.dither.lut0_l = 0x3210;
+    dst.dither.lut0_l = 0x0000;
     dst.dither.lut0_h = 0x7654;
     dst.dither.lut1_l = 0xba98;
-    dst.dither.lut1_h = 0xfedc;
+    dst.dither.lut1_h = 0xffdc;
 
     ret = rkRga.RkRgaBlit(&src, &dst, NULL);
     if(ret) {

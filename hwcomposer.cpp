@@ -206,6 +206,7 @@ struct ebc_buf_info_t ebc_buf_info;
 
 static int gLastEpdMode = EPD_PART_GC16;
 static int gCurrentEpdMode = EPD_PART_GC16;
+static int gOneFullModeTime = 0;
 static int gResetEpdMode = EPD_PART_GC16;
 static Region gLastA2Region;
 static Region gSavedUpdateRegion;
@@ -1829,12 +1830,21 @@ static int hwc_handle_eink_mode(int mode){
       return 0;
   }
 
+
   if(gPowerMode == EPD_RESUME){
       gCurrentEpdMode = EPD_RESUME;
       gPowerMode = EPD_NULL;
       return 0;
   }else{
-      gCurrentEpdMode = mode;
+      char value[PROPERTY_VALUE_MAX];
+      property_get("sys.eink.one_full_mode_timeline", value, "0");
+      int one_full_mode_timeline = atoi(value);
+      if(gOneFullModeTime != one_full_mode_timeline){
+        gOneFullModeTime = one_full_mode_timeline;
+        gCurrentEpdMode = EPD_FULL_GC16;
+      }else{
+        gCurrentEpdMode = mode;
+      }
   }
   return 0;
 }
@@ -1851,6 +1861,9 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
 
   property_get("sys.eink.mode", value, "0");
   int requestEpdMode = atoi(value);
+
+  property_get("sys.eink.one_full_mode_timeline", value, "0");
+  int one_full_mode_timeline = atoi(value);
   //Handle eink mode.
   ret = hwc_handle_eink_mode(requestEpdMode);
 

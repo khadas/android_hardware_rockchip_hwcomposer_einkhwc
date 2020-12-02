@@ -2111,8 +2111,8 @@ static int hwc_get_active_config(struct hwc_composer_device_1 *dev,
                                  int display) {
   UN_USED(dev);
   UN_USED(display);
-  ALOGD_IF(log_level(DBG_DEBUG),"DEBUG_lb getActiveConfig mode = %d",gCurrentEpdMode);
-  return gCurrentEpdMode;
+  ALOGD_IF(log_level(DBG_DEBUG),"DEBUG_lb getActiveConfig mode = %d",0);
+  return 0;
 }
 
 static int hwc_set_active_config(struct hwc_composer_device_1 *dev, int display,

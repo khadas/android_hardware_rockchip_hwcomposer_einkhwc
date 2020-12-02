@@ -701,6 +701,39 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
   return 0;
 }
 
+int EinkCompositorWorker::PostEinkY8(int *buffer, Rect rect, int mode){
+  ATRACE_CALL();
+
+  DumpEinkSurface(buffer);
+
+  struct ebc_buf_info_t buf_info;
+
+  if(ioctl(ebc_fd, EBC_GET_BUFFER,&buf_info)!=0)
+  {
+     ALOGE("EBC_GET_BUFFER failed\n");
+    return -1;
+  }
+
+  buf_info.win_x1 = rect.left;
+  buf_info.win_x2 = rect.right;
+  buf_info.win_y1 = rect.top;
+  buf_info.win_y2 = rect.bottom;
+  buf_info.epd_mode = mode;
+
+  ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",__FUNCTION__,__LINE__,
+      mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
+  unsigned long vaddr_real = intptr_t(ebc_buffer_base);
+  memcpy((void *)(vaddr_real + buf_info.offset), buffer,
+          buf_info.height * buf_info.width);
+
+  if(ioctl(ebc_fd, EBC_SEND_BUFFER,&buf_info)!=0)
+  {
+     ALOGE("EBC_SEND_BUFFER failed\n");
+     return -1;
+  }
+  return 0;
+}
+
 
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
@@ -845,6 +878,7 @@ int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
   gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&rga_output_addr);
 
+  memcpy(gray256_new_buffer,rga_output_addr,ebc_buf_info.width * ebc_buf_info.height);
   if(rga_output_addr != NULL){
     gralloc_->unlock(gralloc_, src_hnd);
     rga_output_addr = NULL;
@@ -968,6 +1002,13 @@ int EinkCompositorWorker::ColorCommit(int epd_mode) {
   gLastEpdMode = epd_mode;
   return 0;
 }
+int EinkCompositorWorker::EinkCommit(int epd_mode) {
+  Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
+  int *gray256_new_buffer_bak = gray256_new_buffer;
+  PostEinkY8(gray256_new_buffer_bak, screen_rect, epd_mode);
+  gLastEpdMode = epd_mode;
+  return 0;
+}
 
 int EinkCompositorWorker::Y4Commit(int epd_mode) {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
@@ -1025,9 +1066,11 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
       ConvertToY4Dither(fb_handle);
       Y4Commit(gCurrentEpdMode);
       break;
-//    case EPD_PART_EINK:
-//      ConvertToY8(fb_handle);
-//      EinkCommit();
+    case EPD_PART_EINK:
+    case EPD_FULL_EINK:
+      ConvertToY8(fb_handle);
+      EinkCommit(gCurrentEpdMode);
+      break;
 //    case EPD_COLOR_EINK1:
 //      ConvertToColorEink1(fb_handle);
 //      ColorCommit(gCurrentEpdMode);

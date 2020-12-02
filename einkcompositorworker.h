@@ -173,11 +173,13 @@ class EinkCompositorWorker : public Worker {
   int ConvertToY4Dither(const buffer_handle_t &fb_handle);
   int ConvertToY1Dither(const buffer_handle_t &fb_handle);
   int ColorCommit(int epd_mode);
+  int EinkCommit(int epd_mode);
   int Y4Commit(int epd_mode);
   int A2Commit();
   int update_fullmode_num();
   int DumpEinkSurface(int *buffer);
   int PostEink(int *buffer, Rect rect, int mode);
+  int PostEinkY8(int *buffer, Rect rect, int mode);
   int SetEinkMode(const buffer_handle_t &fb_handle);
   void Compose(std::unique_ptr<EinkComposition> composition);
 

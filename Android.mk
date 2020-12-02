@@ -76,6 +76,31 @@ LOCAL_SRC_FILES := \
         hwc_debug.cpp \
         einkcompositorworker.cpp
 
+# Gralloc 4.0
+ifeq ($(TARGET_RK_GRALLOC_VERSION),4)
+LOCAL_CFLAGS += -DUSE_GRALLOC_4=1
+LOCAL_C_INCLUDES += \
+        hardware/rockchip/libgralloc/bifrost/src \
+        hardware/libhardware/include
+
+LOCAL_SRC_FILES += \
+        drmgralloc4.cpp
+
+LOCAL_SHARED_LIBRARIES += \
+        libhidlbase \
+        libgralloctypes \
+        android.hardware.graphics.mapper@4.0
+
+LOCAL_HEADER_LIBRARIES += \
+        libgralloc_headers
+else
+LOCAL_CPPFLAGS += -DRK_DRM_GRALLOC=1
+LOCAL_C_INCLUDES += \
+        hardware/rockchip/libgralloc/bifrost/src \
+        hardware/rockchip/libgralloc/bifrost \
+        hardware/libhardware/include
+endif
+
 MAJOR_VERSION := "RK_GRAPHICS_VER=commit-id:$(shell cd $(LOCAL_PATH) && git log  -1 --oneline | awk '{print $$1}')"
 LOCAL_CPPFLAGS += -DRK_GRAPHICS_VER=\"$(MAJOR_VERSION)\" -DRK356X
 

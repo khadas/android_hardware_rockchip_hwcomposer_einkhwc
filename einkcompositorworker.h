@@ -199,7 +199,6 @@ class EinkCompositorWorker : public Worker {
   pthread_cond_t eink_queue_cond_;
   //Eink support
   struct hwc_context_t *hwc_context_;
-  gralloc_module_t *gralloc_;
 
   int ebc_fd = -1;
   void *ebc_buffer_base = NULL;

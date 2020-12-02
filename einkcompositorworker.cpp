@@ -63,8 +63,7 @@ EinkCompositorWorker::EinkCompositorWorker()
       timeline_fd_(-1),
       timeline_(0),
       timeline_current_(0),
-      hwc_context_(NULL),
-      gralloc_(NULL) {
+      hwc_context_(NULL){
 }
 
 EinkCompositorWorker::~EinkCompositorWorker() {
@@ -108,13 +107,6 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
     return ret;
   }
   timeline_fd_ = ret;
-
-  ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                    (const hw_module_t **)&gralloc_);
-  if (ret) {
-      ALOGE("Failed to open gralloc module");
-      return ret;
-  }
 
   pthread_cond_init(&eink_queue_cond_, NULL);
 
@@ -333,15 +325,15 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     dst.fd = -1;
 
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(fb_handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
-    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
-    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
+    src_buf_w = hwc_get_handle_width(fb_handle);
+    src_buf_h = hwc_get_handle_height(fb_handle);
+    src_buf_stride = hwc_get_handle_stride(fb_handle);
+    src_buf_format = hwc_get_handle_format(fb_handle);
 #endif
 
     src_l = 0;
@@ -412,18 +404,18 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_h
 
     int *src_vir = NULL;
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(fb_handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
-    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
-    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
+    src_buf_w = hwc_get_handle_width(fb_handle);
+    src_buf_h = hwc_get_handle_height(fb_handle);
+    src_buf_stride = hwc_get_handle_stride(fb_handle);
+    src_buf_format = hwc_get_handle_format(fb_handle);
 #endif
 
-    gralloc_->lock(gralloc_, fb_handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+    hwc_lock(fb_handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, src_buf_w, src_buf_h, (void **)&src_vir);
 
     src_l = 0;
@@ -480,7 +472,7 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_h
     DumpLayer("yuv", dst.hnd);
 
     if(src_vir != NULL){
-      gralloc_->unlock(gralloc_, fb_handle);
+      hwc_unlock(fb_handle);
       src_vir = NULL;
     }
 
@@ -504,15 +496,15 @@ int EinkCompositorWorker::Rgba888ToGray256ByRga(DrmRgaBuffer &rgaBuffer,const bu
     dst.fd = -1;
 
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(fb_handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
-    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
-    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
+    src_buf_w = hwc_get_handle_width(fb_handle);
+    src_buf_h = hwc_get_handle_height(fb_handle);
+    src_buf_stride = hwc_get_handle_stride(fb_handle);
+    src_buf_format = hwc_get_handle_format(fb_handle);
 #endif
 
     src_l = 0;
@@ -581,15 +573,15 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
     dst.fd = -1;
 
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc_,fb_handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(fb_handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(fb_handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(fb_handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(fb_handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc_,fb_handle);
-    src_buf_h = hwc_get_handle_height(gralloc_,fb_handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc_,fb_handle);
-    src_buf_format = hwc_get_handle_format(gralloc_,fb_handle);
+    src_buf_w = hwc_get_handle_width(fb_handle);
+    src_buf_h = hwc_get_handle_height(fb_handle);
+    src_buf_stride = hwc_get_handle_stride(fb_handle);
+    src_buf_format = hwc_get_handle_format(fb_handle);
 #endif
 
     src_l = 0;
@@ -766,12 +758,12 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
 
-  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+  width = hwc_get_handle_attibute(src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(src_hnd,ATT_SIZE);
 
   ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
   if (ret) {
@@ -779,13 +771,13 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
     return ret;
   }
 
-  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+  hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&framebuffer_base);
 
   Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.width);
 
   if(rga_output_addr != NULL){
-    gralloc_->unlock(gralloc_, src_hnd);
+    hwc_unlock(src_hnd);
     rga_output_addr = NULL;
   }
 
@@ -818,12 +810,12 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
 
-  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+  width = hwc_get_handle_attibute(src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(src_hnd,ATT_SIZE);
 
   ret = Rgba8888ClipRgba(rga_buffer, fb_handle);
   if (ret) {
@@ -831,11 +823,11 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
     return ret;
   }
 
-  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+  hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&framebuffer_base);
 
   if(rga_output_addr != NULL){
-    gralloc_->unlock(gralloc_, src_hnd);
+    hwc_unlock(src_hnd);
     rga_output_addr = NULL;
   }
   return 0;
@@ -862,12 +854,12 @@ int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
 
-  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+  width = hwc_get_handle_attibute(src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(src_hnd,ATT_SIZE);
 
   ret = Rgba888ToGray256ByRga(rga_buffer, fb_handle);
   if (ret) {
@@ -875,12 +867,12 @@ int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
     return ret;
   }
 
-  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+  hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&rga_output_addr);
 
   memcpy(gray256_new_buffer,rga_output_addr,ebc_buf_info.width * ebc_buf_info.height);
   if(rga_output_addr != NULL){
-    gralloc_->unlock(gralloc_, src_hnd);
+    hwc_unlock(src_hnd);
     rga_output_addr = NULL;
   }
   return 0;
@@ -918,12 +910,12 @@ int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
     int width,height,stride,byte_stride,format,size;
     buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
 
-    width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
-    height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
-    stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
-    byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
-    format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
-    size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+    width = hwc_get_handle_attibute(src_hnd,ATT_WIDTH);
+    height = hwc_get_handle_attibute(src_hnd,ATT_HEIGHT);
+    stride = hwc_get_handle_attibute(src_hnd,ATT_STRIDE);
+    byte_stride = hwc_get_handle_attibute(src_hnd,ATT_BYTE_STRIDE);
+    format = hwc_get_handle_attibute(src_hnd,ATT_FORMAT);
+    size = hwc_get_handle_attibute(src_hnd,ATT_SIZE);
 
     ret = Rgba888ToGray256ByRga(rga_buffer, fb_handle);
     if (ret) {
@@ -931,14 +923,14 @@ int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
       return ret;
     }
 
-    gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+    hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                   0, 0, width, height, (void **)&rga_output_addr);
 
     gray256_addr = rga_output_addr;
     gray256_to_gray16_dither(gray256_addr,gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
 
     if(rga_output_addr != NULL){
-      gralloc_->unlock(gralloc_, src_hnd);
+      hwc_unlock(src_hnd);
       rga_output_addr = NULL;
     }
 
@@ -967,12 +959,12 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
   int width,height,stride,byte_stride,format,size;
   buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
 
-  width = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_WIDTH);
-  height = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_HEIGHT);
-  stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_STRIDE);
-  byte_stride = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_BYTE_STRIDE);
-  format = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_FORMAT);
-  size = hwc_get_handle_attibute(gralloc_,src_hnd,ATT_SIZE);
+  width = hwc_get_handle_attibute(src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(src_hnd,ATT_SIZE);
 
   ret = Rgba888ToGray256ByRga(rga_buffer, fb_handle);
   if (ret) {
@@ -980,7 +972,7 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
     return ret;
   }
 
-  gralloc_->lock(gralloc_, src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+  hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&rga_output_addr);
 
   gray256_addr = rga_output_addr;
@@ -990,7 +982,7 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
 
 
   if(rga_output_addr != NULL){
-    gralloc_->unlock(gralloc_, src_hnd);
+    hwc_unlock(src_hnd);
     rga_output_addr = NULL;
   }
   return 0;

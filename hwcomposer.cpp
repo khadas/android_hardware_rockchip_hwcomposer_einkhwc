@@ -375,25 +375,16 @@ int hwc_rgba888_to_gray256(DrmRgaBuffer &rgaBuffer,hwc_layer_1_t *fb_target,hwc_
     src.fd = -1;
     dst.fd = -1;
 
-    //Get virtual address
-    const gralloc_module_t *gralloc;
-    ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                      (const hw_module_t **)&gralloc);
-    if (ret) {
-        ALOGE("Failed to open gralloc module");
-        return ret;
-    }
-
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-    src_buf_w = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_WIDTH);
-    src_buf_h = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_HEIGHT);
-    src_buf_stride = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_STRIDE);
-    src_buf_format = hwc_get_handle_attibute(gralloc,fb_target->handle,ATT_FORMAT);
+    src_buf_w = hwc_get_handle_attibute(fb_target->handle,ATT_WIDTH);
+    src_buf_h = hwc_get_handle_attibute(fb_target->handle,ATT_HEIGHT);
+    src_buf_stride = hwc_get_handle_attibute(fb_target->handle,ATT_STRIDE);
+    src_buf_format = hwc_get_handle_attibute(fb_target->handle,ATT_FORMAT);
 #else
-    src_buf_w = hwc_get_handle_width(gralloc,fb_target->handle);
-    src_buf_h = hwc_get_handle_height(gralloc,fb_target->handle);
-    src_buf_stride = hwc_get_handle_stride(gralloc,fb_target->handle);
-    src_buf_format = hwc_get_handle_format(gralloc,fb_target->handle);
+    src_buf_w = hwc_get_handle_width(fb_target->handle);
+    src_buf_h = hwc_get_handle_height(fb_target->handle);
+    src_buf_stride = hwc_get_handle_stride(fb_target->handle);
+    src_buf_format = hwc_get_handle_format(fb_target->handle);
 #endif
 
     src_l = (int)fb_target->sourceCropf.left;
@@ -2173,6 +2164,8 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
   }
 
   init_rk_debug();
+
+  property_set("vendor.gralloc.disable_afbc","1");
 
   std::unique_ptr<hwc_context_t> ctx(new hwc_context_t());
   if (!ctx) {

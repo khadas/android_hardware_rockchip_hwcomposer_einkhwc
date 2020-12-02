@@ -106,32 +106,26 @@ int DumpLayer(const char* layer_name,buffer_handle_t handle)
         int i;
         int width,height,stride,byte_stride,format,size;
 
-        int ret = hw_get_module(GRALLOC_HARDWARE_MODULE_ID,
-                          (const hw_module_t **)&gralloc);
-        if (ret) {
-            ALOGE("Failed to open gralloc module");
-            return ret;
-        }
 #if (!RK_PER_MODE && RK_DRM_GRALLOC)
-        width = hwc_get_handle_attibute(gralloc,handle,ATT_WIDTH);
-        height = hwc_get_handle_attibute(gralloc,handle,ATT_HEIGHT);
-        stride = hwc_get_handle_attibute(gralloc,handle,ATT_STRIDE);
-        byte_stride = hwc_get_handle_attibute(gralloc,handle,ATT_BYTE_STRIDE);
-        format = hwc_get_handle_attibute(gralloc,handle,ATT_FORMAT);
-        size = hwc_get_handle_attibute(gralloc,handle,ATT_SIZE);
+        width = hwc_get_handle_attibute(handle,ATT_WIDTH);
+        height = hwc_get_handle_attibute(handle,ATT_HEIGHT);
+        stride = hwc_get_handle_attibute(handle,ATT_STRIDE);
+        byte_stride = hwc_get_handle_attibute(handle,ATT_BYTE_STRIDE);
+        format = hwc_get_handle_attibute(handle,ATT_FORMAT);
+        size = hwc_get_handle_attibute(handle,ATT_SIZE);
 #else
-        width = hwc_get_handle_width(gralloc,handle);
-        height = hwc_get_handle_height(gralloc,handle);
-        stride = hwc_get_handle_stride(gralloc,handle);
-        byte_stride = hwc_get_handle_byte_stride(gralloc,handle);
-        format = hwc_get_handle_format(gralloc,handle);
-        size = hwc_get_handle_size(gralloc,handle);
+        width = hwc_get_handle_width(handle);
+        height = hwc_get_handle_height(handle);
+        stride = hwc_get_handle_stride(handle);
+        byte_stride = hwc_get_handle_byte_stride(handle);
+        format = hwc_get_handle_format(handle);
+        size = hwc_get_handle_size(handle);
 #endif
         system("mkdir /data/dump/ && chmod /data/dump/ 777 ");
         DumpSurfaceCount++;
         sprintf(data_name,"/data/dump/dmlayer%s_%d_%d_%d.bin",layer_name, DumpSurfaceCount,
                 stride,height);
-        gralloc->lock(gralloc, handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+        hwc_lock(handle, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                         0, 0, width, height, (void **)&cpu_addr);
         pfile = fopen(data_name,"wb");
         if(pfile)
@@ -148,7 +142,7 @@ int DumpLayer(const char* layer_name,buffer_handle_t handle)
             ALOGD(" dump surface layer_name: %s,data_name %s,w:%d,h:%d,stride :%d,size=%d,cpu_addr=%p",
                 layer_name,data_name,width,height,byte_stride,size,cpu_addr);
         }
-        gralloc->unlock(gralloc, handle);
+        hwc_unlock(handle);
         //only dump once time.
         if(DumpSurfaceCount > DUMP_LAYER_CNT)
         {
@@ -206,9 +200,9 @@ void dump_layer(const gralloc_module_t *gralloc, bool bDump, hwc_layer_1_t *laye
         if(layer->handle)
         {
 #if RK_DRM_GRALLOC
-            format = hwc_get_handle_attibute(gralloc, layer->handle, ATT_FORMAT);
+            format = hwc_get_handle_attibute(layer->handle, ATT_FORMAT);
 #else
-            format = hwc_get_handle_format(gralloc, layer->handle);
+            format = hwc_get_handle_format(layer->handle);
 #endif
 
 #if RK_PRINT_LAYER_NAME
@@ -229,7 +223,7 @@ void dump_layer(const gralloc_module_t *gralloc, bool bDump, hwc_layer_1_t *laye
                 << ",flags=" << layer->flags
                 << ",handle=" << layer->handle
                 << ",format=0x" << std::hex << format
-                << ",fd =" << std::dec << hwc_get_handle_primefd(gralloc, layer->handle)
+                << ",fd =" << std::dec << hwc_get_handle_primefd(layer->handle)
                 << ",transform=0x" <<  std::hex << layer->transform
                 << ",blend=0x" << layer->blending
                 << ",sourceCropf{" << std::dec
@@ -250,7 +244,7 @@ void dump_layer(const gralloc_module_t *gralloc, bool bDump, hwc_layer_1_t *laye
         {
 #if RK_PRINT_LAYER_NAME
 #ifdef USE_HWC2
-                hwc_get_handle_layername(gralloc, layer->handle, layername, 100);
+                hwc_get_handle_layername(layer->handle, layername, 100);
                 out << "layer[" << index << "]=" << layername
 #else
                 out << "layer[" << index << "]=" << layer->LayerName

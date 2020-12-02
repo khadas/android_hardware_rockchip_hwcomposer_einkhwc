@@ -183,27 +183,20 @@ typedef struct hwc_drm_display {
 int hwc_init_version();
 
 float getPixelWidthByAndroidFormat(int format);
-#ifdef USE_HWC2
-int hwc_get_handle_displayStereo(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_set_handle_displayStereo(const gralloc_module_t *gralloc, buffer_handle_t hnd, int32_t displayStereo);
-int hwc_get_handle_alreadyStereo(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_set_handle_alreadyStereo(const gralloc_module_t *gralloc, buffer_handle_t hnd, int32_t alreadyStereo);
-int hwc_get_handle_layername(const gralloc_module_t *gralloc, buffer_handle_t hnd, char* layername, unsigned long len);
-int hwc_set_handle_layername(const gralloc_module_t *gralloc, buffer_handle_t hnd, const char* layername);
-
-#endif
-int hwc_get_handle_width(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_get_handle_height(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_get_handle_format(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_get_handle_stride(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_get_handle_byte_stride(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_get_handle_usage(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_get_handle_size(const gralloc_module_t *gralloc, buffer_handle_t hnd);
-int hwc_get_handle_attributes(const gralloc_module_t *gralloc, buffer_handle_t hnd, std::vector<int> *attrs);
-int hwc_get_handle_attibute(const gralloc_module_t *gralloc, buffer_handle_t hnd, attribute_flag_t flag);
-int hwc_get_handle_primefd(const gralloc_module_t *gralloc, buffer_handle_t hnd);
+int hwc_lock(buffer_handle_t hnd,int usage, int x, int y, int w, int h, void **cpu_addr);
+int hwc_unlock(buffer_handle_t hnd);
+int hwc_get_handle_width(buffer_handle_t hnd);
+int hwc_get_handle_height(buffer_handle_t hnd);
+int hwc_get_handle_format(buffer_handle_t hnd);
+int hwc_get_handle_stride(buffer_handle_t hnd);
+int hwc_get_handle_byte_stride(buffer_handle_t hnd);
+int hwc_get_handle_usage(buffer_handle_t hnd);
+int hwc_get_handle_size(buffer_handle_t hnd);
+int hwc_get_handle_attributes(buffer_handle_t hnd, std::vector<int> *attrs);
+int hwc_get_handle_attibute(buffer_handle_t hnd, attribute_flag_t flag);
+int hwc_get_handle_primefd(buffer_handle_t hnd);
 #if RK_DRM_GRALLOC
-uint32_t hwc_get_handle_phy_addr(const gralloc_module_t *gralloc, buffer_handle_t hnd);
+uint32_t hwc_get_handle_phy_addr(buffer_handle_t hnd);
 #endif
 void hwc_list_nodraw(hwc_display_contents_1_t  *list);
 void hwc_sync_release(hwc_display_contents_1_t  *list);

@@ -131,20 +131,13 @@ enum panel_refresh_mode {
 	EPD_PART_GLD16		= 10,
 	EPD_PART_GCC16		= 11,
 	EPD_A2				= 12,
-	EPD_A2_DITHER		= 13,
-	EPD_DU				= 14,
-	EPD_RESET			= 15,
-	EPD_SUSPEND		= 16,
-	EPD_RESUME			= 17,
-	EPD_POWER_OFF		= 18,
-	EPD_FULL_DIRECT	= 19,
-	EPD_PART_DIRECT	= 20,
-	EPD_A2_DIRECT		= 21,
-	EPD_DU_DIRECT		= 22,
-	EPD_AUTO_DIRECT	= 23,
-	EPD_OVERLAY_DIRECT	= 24,
-	EPD_PART_EINK		= 25,
-	EPD_FULL_EINK		= 26,
+	EPD_DU				= 13,
+	EPD_RESET			= 14,
+	EPD_SUSPEND		= 15,
+	EPD_RESUME			= 16,
+	EPD_POWER_OFF		= 17,
+	EPD_PART_EINK		= 18,
+	EPD_FULL_EINK		= 19,
 };
 
 /*
@@ -1920,7 +1913,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
 
   switch (mode) {
     case HWC_POWER_MODE_OFF:
-      gPowerMode = EPD_POWER_OFF;
+      gPowerMode = EPD_SUSPEND;
       ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
       gCurrentEpdMode = EPD_SUSPEND;
 
@@ -1939,7 +1932,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
           hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
         }else{
-          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
+          hwc_post_epd_logo(STANDBY_IMAGE_PATH_DEFAULT);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER,POWEROFF_IMAGE_PATH_DEFAULT);
         }
       }

@@ -2158,7 +2158,7 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
 
   init_rk_debug();
 
-  property_set("vendor.gralloc.disable_afbc","1");
+  property_set("vendor.gralloc.no_afbc_for_fb_target_layer","1");
 
   std::unique_ptr<hwc_context_t> ctx(new hwc_context_t());
   if (!ctx) {

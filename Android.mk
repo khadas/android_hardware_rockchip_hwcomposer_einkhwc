@@ -48,7 +48,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libutils \
         librga \
         libjpeg \
-        libpng
+        libpng \
+        libskia
 
 LOCAL_STATIC_LIBRARIES := \
 	libtinyxml2

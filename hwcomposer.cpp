@@ -1626,6 +1626,32 @@ int hwc_post_epd_logo(const char src_path[]) {
 
     return 0;
 }
+static int hwc_adajust_sf_vsync(int mode){
+  static int last_mode = EPD_PART_GC16;
+
+  if(mode == last_mode)
+    return 0;
+
+  char refresh_skip_count[5] = {0};
+  switch(mode){
+    case EPD_AUTO:
+    case EPD_OVERLAY:
+    case EPD_A2:
+      strcpy(refresh_skip_count, "0");
+      break;
+    case EPD_DU:
+      strcpy(refresh_skip_count, "1");
+      break;
+    default:
+      strcpy(refresh_skip_count, "3");
+      break;
+  }
+
+  char value[PROPERTY_VALUE_MAX];
+  property_set("persist.sys.refresh_skip_count", refresh_skip_count);
+  last_mode = mode;
+  return 0;
+}
 
 static int hwc_handle_eink_mode(int mode){
 
@@ -1672,6 +1698,9 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   int one_full_mode_timeline = atoi(value);
   //Handle eink mode.
   ret = hwc_handle_eink_mode(requestEpdMode);
+
+  //Handle eink mode.
+  ret = hwc_adajust_sf_vsync(requestEpdMode);
 
   if(gCurrentEpdMode != EPD_SUSPEND){
     for (size_t i = 0; i < num_displays; ++i) {

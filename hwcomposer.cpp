@@ -1627,7 +1627,7 @@ int hwc_post_epd_logo(const char src_path[]) {
     return 0;
 }
 static int hwc_adajust_sf_vsync(int mode){
-  static int last_mode = EPD_PART_GC16;
+  static int last_mode = EPD_NULL;
 
   if(mode == last_mode)
     return 0;

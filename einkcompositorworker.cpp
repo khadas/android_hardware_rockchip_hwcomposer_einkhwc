@@ -91,8 +91,6 @@ EinkCompositorWorker::~EinkCompositorWorker() {
     buffer_handle_t src_hnd = gra_buffer.buffer()->handle;
     gralloc->unlock(gralloc, src_hnd);
   }
-  if(gray16_buffer != NULL)
-    free(gray16_buffer);
   if (gray256_new_buffer != NULL)
     free(gray256_new_buffer);
   if (rgba_new_buffer != NULL)
@@ -124,8 +122,14 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
       ALOGE("Error mapping the ebc buffer (%s)\n", strerror(errno));
   }
 
-  // Due to RK356x RGA driver bug, gray16_buffer must to alloc w*h*4 instead of w*h*0.5
-  gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
+  if(ioctl(ebc_fd, EBC_GET_BUFFER,&commit_buf_info)!=0)
+  {
+     ALOGE("EBC_GET_BUFFER failed\n");
+    return -1;
+  }
+
+  unsigned long vaddr_real = intptr_t(ebc_buffer_base);
+  gray16_buffer = (int*)(vaddr_real + commit_buf_info.offset);
 
   gray256_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
   rgba_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
@@ -665,31 +669,31 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
 
   DumpEinkSurface(buffer);
 
-  struct ebc_buf_info_t buf_info;
+  commit_buf_info.win_x1 = rect.left;
+  commit_buf_info.win_x2 = rect.right;
+  commit_buf_info.win_y1 = rect.top;
+  commit_buf_info.win_y2 = rect.bottom;
+  commit_buf_info.epd_mode = mode;
 
-  if(ioctl(ebc_fd, EBC_GET_BUFFER,&buf_info)!=0)
+  ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",
+            __FUNCTION__,__LINE__,mode,commit_buf_info.win_x1,commit_buf_info.win_x2,
+            commit_buf_info.win_y1,commit_buf_info.win_y2);
+
+  if(ioctl(ebc_fd, EBC_SEND_BUFFER,&commit_buf_info)!=0)
+  {
+     ALOGE("EBC_SEND_BUFFER failed\n");
+     return -1;
+  }
+
+  if(ioctl(ebc_fd, EBC_GET_BUFFER,&commit_buf_info)!=0)
   {
      ALOGE("EBC_GET_BUFFER failed\n");
     return -1;
   }
 
-  buf_info.win_x1 = rect.left;
-  buf_info.win_x2 = rect.right;
-  buf_info.win_y1 = rect.top;
-  buf_info.win_y2 = rect.bottom;
-  buf_info.epd_mode = mode;
-
-  ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",__FUNCTION__,__LINE__,
-      mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
-  memcpy((void *)(vaddr_real + buf_info.offset), buffer,
-          buf_info.height * buf_info.width >> 1);
+  gray16_buffer = (int*)(vaddr_real + commit_buf_info.offset);
 
-  if(ioctl(ebc_fd, EBC_SEND_BUFFER,&buf_info)!=0)
-  {
-     ALOGE("EBC_SEND_BUFFER failed\n");
-     return -1;
-  }
   return 0;
 }
 
@@ -698,31 +702,33 @@ int EinkCompositorWorker::PostEinkY8(int *buffer, Rect rect, int mode){
 
   DumpEinkSurface(buffer);
 
-  struct ebc_buf_info_t buf_info;
+  commit_buf_info.win_x1 = rect.left;
+  commit_buf_info.win_x2 = rect.right;
+  commit_buf_info.win_y1 = rect.top;
+  commit_buf_info.win_y2 = rect.bottom;
+  commit_buf_info.epd_mode = mode;
 
-  if(ioctl(ebc_fd, EBC_GET_BUFFER,&buf_info)!=0)
+  ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",
+            __FUNCTION__,__LINE__,mode,commit_buf_info.win_x1,commit_buf_info.win_x2,
+            commit_buf_info.win_y1,commit_buf_info.win_y2);
+
+
+  if(ioctl(ebc_fd, EBC_SEND_BUFFER,&commit_buf_info)!=0)
+  {
+     ALOGE("EBC_SEND_BUFFER failed\n");
+     return -1;
+  }
+
+  if(ioctl(ebc_fd, EBC_GET_BUFFER,&commit_buf_info)!=0)
   {
      ALOGE("EBC_GET_BUFFER failed\n");
     return -1;
   }
 
-  buf_info.win_x1 = rect.left;
-  buf_info.win_x2 = rect.right;
-  buf_info.win_y1 = rect.top;
-  buf_info.win_y2 = rect.bottom;
-  buf_info.epd_mode = mode;
-
-  ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",__FUNCTION__,__LINE__,
-      mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
-  memcpy((void *)(vaddr_real + buf_info.offset), buffer,
-          buf_info.height * buf_info.width);
+  gray16_buffer = (int*)(vaddr_real + commit_buf_info.offset);
 
-  if(ioctl(ebc_fd, EBC_SEND_BUFFER,&buf_info)!=0)
-  {
-     ALOGE("EBC_SEND_BUFFER failed\n");
-     return -1;
-  }
+
   return 0;
 }
 

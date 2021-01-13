@@ -196,6 +196,7 @@ class EinkCompositorWorker : public Worker {
   int ebc_fd = -1;
   void *ebc_buffer_base = NULL;
   struct ebc_buf_info_t ebc_buf_info;
+  struct ebc_buf_info_t commit_buf_info;
 
   int gLastEpdMode = EPD_PART_GC16;
   int gCurrentEpdMode = EPD_PART_GC16;

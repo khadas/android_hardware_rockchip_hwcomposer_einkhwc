@@ -461,7 +461,7 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_h
     dst.dither.lut0_l = 0x0000;
     dst.dither.lut0_h = 0x7654;
     dst.dither.lut1_l = 0xba98;
-    dst.dither.lut1_h = 0xffdc;
+    dst.dither.lut1_h = 0xffcc;
 
 
     RockchipRga& rkRga(RockchipRga::get());

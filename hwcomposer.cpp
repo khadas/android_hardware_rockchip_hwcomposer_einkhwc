@@ -1637,13 +1637,13 @@ static int hwc_adajust_sf_vsync(int mode){
     case EPD_AUTO:
     case EPD_OVERLAY:
     case EPD_A2:
-      strcpy(refresh_skip_count, "0");
+      strcpy(refresh_skip_count, "5");
       break;
     case EPD_DU:
-      strcpy(refresh_skip_count, "1");
+      strcpy(refresh_skip_count, "5");
       break;
     default:
-      strcpy(refresh_skip_count, "3");
+      strcpy(refresh_skip_count, "2");
       break;
   }
 

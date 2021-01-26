@@ -1887,7 +1887,7 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
   }
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;
-  hwc_info.vrefresh = vrefresh ? vrefresh : 20;
+  hwc_info.vrefresh = vrefresh ? vrefresh : 60;
   *num_configs = 1;
   for(int i = 0 ; i < static_cast<int>(*num_configs); i++  )
     configs[i] = i;

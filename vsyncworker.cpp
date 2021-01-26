@@ -130,7 +130,7 @@ int VSyncWorker::SyntheticWaitVBlank(int64_t *timestamp) {
   struct timespec vsync;
   int ret = clock_gettime(CLOCK_MONOTONIC, &vsync);
 
-  float refresh = 20.0f;  // Default to 60Hz refresh rate
+  float refresh = 60.0f;  // Default to 60Hz refresh rate
 
   int64_t phased_timestamp = GetPhasedVSync(
       kOneSecondNs / refresh, vsync.tv_sec * kOneSecondNs + vsync.tv_nsec);

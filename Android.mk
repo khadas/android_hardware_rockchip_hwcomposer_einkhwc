@@ -33,7 +33,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-BUILD_WITH_RK_EBOOK=true
 ifeq ($(strip $(BUILD_WITH_RK_EBOOK)),true)
 
 LOCAL_PATH := $(call my-dir)

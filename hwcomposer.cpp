@@ -1772,23 +1772,26 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       ALOGD("%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
       gCurrentEpdMode = EPD_SUSPEND;
 
-      char nopower_flag[255];
-      property_get("sys.shutdown.nopower",nopower_flag, "0");
-      if(atoi(nopower_flag) == 1){
-        if (!access(POWEROFF_NOPOWER_IMAGE_PATH_USER, R_OK)){
-          hwc_post_epd_logo(POWEROFF_NOPOWER_IMAGE_PATH_USER);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_NOPOWER_IMAGE_PATH_USER);
-        }else{
-          hwc_post_epd_logo(POWEROFF_NOPOWER_IMAGE_PATH_DEFAULT);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_NOPOWER_IMAGE_PATH_USER,POWEROFF_NOPOWER_IMAGE_PATH_DEFAULT);
-        }
-      } else {
+      char power_status[255];
+
+      property_get("sys.power.status",power_status, "0");
+        if(atoi(power_status) == 1){
+        //如果处于低电量
+            if (!access(POWEROFF_NOPOWER_IMAGE_PATH_USER, R_OK)){
+                hwc_post_epd_logo(POWEROFF_NOPOWER_IMAGE_PATH_USER);
+                ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_NOPOWER_IMAGE_PATH_USER);
+            }else{
+                hwc_post_epd_logo(POWEROFF_NOPOWER_IMAGE_PATH_DEFAULT);
+                ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_NOPOWER_IMAGE_PATH_USER,POWEROFF_NOPOWER_IMAGE_PATH_DEFAULT);
+            }
+        } else {
+        //如果电量正常
         if (!access(POWEROFF_IMAGE_PATH_USER, R_OK)){
-          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
-        }else{
-          hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER,POWEROFF_IMAGE_PATH_DEFAULT);
+                hwc_post_epd_logo(POWEROFF_IMAGE_PATH_USER);
+                ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER);
+            }else{
+                hwc_post_epd_logo(POWEROFF_IMAGE_PATH_DEFAULT);
+                ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,POWEROFF_IMAGE_PATH_USER,POWEROFF_IMAGE_PATH_DEFAULT);
         }
       }
      }
@@ -1796,28 +1799,31 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gPowerMode = EPD_SUSPEND;
       gCurrentEpdMode = EPD_SUSPEND;
       ALOGD("%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
-
-      char standby_nopower_flag[255];
-      char standby_charge_flag[255];
-      property_get("sys.standby.lowpower",standby_nopower_flag, "0");
-      property_get("sys.standby.charge",standby_charge_flag, "0");
-      if (atoi(standby_nopower_flag) == 1){
-        if (!access(STANDBY_LOWPOWER_PATH_USER, R_OK)){
-          hwc_post_epd_logo(STANDBY_LOWPOWER_PATH_USER);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_LOWPOWER_PATH_USER);
-        }else{
-          hwc_post_epd_logo(STANDBY_LOWPOWER_PATH_DEFAULT);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_LOWPOWER_PATH_USER,STANDBY_LOWPOWER_PATH_DEFAULT);
-        }
-      } else if (atoi(standby_charge_flag) == 1){
-        if (!access(STANDBY_CHARGE_PATH_USER, R_OK)){
-          hwc_post_epd_logo(STANDBY_CHARGE_PATH_USER);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER);
-        }else{
-          hwc_post_epd_logo(STANDBY_CHARGE_PATH_DEFAULT);
-          ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER,STANDBY_CHARGE_PATH_DEFAULT);
-        }
+      
+      char power_status[255];
+      char power_connected[255];
+      property_get("sys.power.status",power_status, "0");
+      property_get("sys.power.connected",power_connected, "0");
+      if (atoi(power_connected) == 1){
+            //优先判断是否在充电中
+            if (!access(STANDBY_CHARGE_PATH_USER, R_OK)){
+              hwc_post_epd_logo(STANDBY_CHARGE_PATH_USER);
+              ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER);
+            }else{
+              hwc_post_epd_logo(STANDBY_CHARGE_PATH_DEFAULT);
+              ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_CHARGE_PATH_USER,STANDBY_CHARGE_PATH_DEFAULT);
+            }
+      } else if (atoi(power_status) == 1){
+            //如果没有在充电中，并且处于低电
+            if (!access(STANDBY_LOWPOWER_PATH_USER, R_OK)){
+              hwc_post_epd_logo(STANDBY_LOWPOWER_PATH_USER);
+              ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_LOWPOWER_PATH_USER);
+            }else{
+              hwc_post_epd_logo(STANDBY_LOWPOWER_PATH_DEFAULT);
+              ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s not found ,use %s.",__FUNCTION__,__LINE__,STANDBY_LOWPOWER_PATH_USER,STANDBY_LOWPOWER_PATH_DEFAULT);
+            }
       } else {
+        //如果没有在充电中，并且电量正常
         if (!access(STANDBY_IMAGE_PATH_USER, R_OK)){
           hwc_post_epd_logo(STANDBY_IMAGE_PATH_USER);
           ALOGD_IF(log_level(DBG_DEBUG),"%s,line = %d ,%s exist,use it.",__FUNCTION__,__LINE__,STANDBY_IMAGE_PATH_USER);

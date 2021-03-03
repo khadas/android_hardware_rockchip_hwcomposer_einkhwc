@@ -463,10 +463,12 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_h
 		dst.dither.enable = 0;
 		dst.dither.mode = 0;
 
-    dst.dither.lut0_l = 0x0000;
-    dst.dither.lut0_h = 0x7654;
-    dst.dither.lut1_l = 0xba98;
-    dst.dither.lut1_h = 0xffcc;
+    int64_t contrast_key = property_get_int64("persist.vendor.hwc.contrast_key",0xffccba9876540000);
+
+    dst.dither.lut0_l = (contrast_key & 0xffff);
+    dst.dither.lut0_h = (contrast_key & 0xffff0000) >> 16;
+    dst.dither.lut1_l = (contrast_key & 0xffff00000000) >> 32;
+    dst.dither.lut1_h = (contrast_key & 0xffff000000000000) >> 48;
 
 
     RockchipRga& rkRga(RockchipRga::get());

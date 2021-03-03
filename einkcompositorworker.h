@@ -174,6 +174,7 @@ class EinkCompositorWorker : public Worker {
   int PostEink(int *buffer, Rect rect, int mode);
   int PostEinkY8(int *buffer, Rect rect, int mode);
   int SetEinkMode(const buffer_handle_t &fb_handle);
+  int SetColorEinkMode(const buffer_handle_t &fb_handle);
   void Compose(std::unique_ptr<EinkComposition> composition);
 
   bool isSupportRkRga() {

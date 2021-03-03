@@ -281,6 +281,8 @@ extern int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  pa
 extern void Rgb888_to_color_eink(char *dst,int *src,int  fb_height, int fb_width,int vir_width);
 extern void Rgb888_to_color_eink2(char *dst,int *src,int  fb_height, int fb_width,int vir_width);
 
+extern void Rgb565_to_color_eink2(char *dst,int16_t *src,int  fb_height, int fb_width,int vir_width);
+
 extern void neon_rgb888_to_gray256ARM(uint8_t * dest,uint8_t *  src,int h,int w,int vir_w);
 
 extern void rgb888_to_gray16_dither(int *dst,uint8_t *src,int  panel_h, int panel_w,int vir_width);
@@ -321,7 +323,7 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     int dst_l,dst_t,dst_r,dst_b;
 
     int dst_w,dst_h,dst_stride;
-    int src_buf_w,src_buf_h,src_buf_stride,src_buf_format;
+    int src_buf_w,src_buf_h,src_buf_stride,src_buf_format,dst_format;
     rga_info_t src, dst;
     memset(&src, 0, sizeof(rga_info_t));
     memset(&dst, 0, sizeof(rga_info_t));
@@ -340,6 +342,8 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     src_buf_format = hwc_get_handle_format(fb_handle);
 #endif
 
+    dst_format = hwc_get_handle_attibute(rgaBuffer.buffer()->handle,ATT_FORMAT);
+
     src_l = 0;
     src_t = 0;
     dst_l = 0;
@@ -349,8 +353,7 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
       src_h = ebc_buf_info.height/2;// - ((ebc_buf_info.height/2) % 2);
       dst_w = ebc_buf_info.width/2;// - ((ebc_buf_info.width/2) % 8);
       dst_h = ebc_buf_info.height/2;// - ((ebc_buf_info.height/2) % 2);
-    }
-    else {
+    }else {
       src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
       src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
       dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
@@ -366,13 +369,13 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     rga_set_rect(&src.rect,
                 src_l, src_t, src_w, src_h,
                 src_buf_stride, src_buf_h, src_buf_format);
-    rga_set_rect(&dst.rect, dst_l, dst_t,  dst_w, dst_h, dst_w, dst_h, HAL_PIXEL_FORMAT_RGBA_8888);
+    rga_set_rect(&dst.rect, dst_l, dst_t,  dst_w, dst_h, dst_w, dst_h, dst_format);
 
     ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
         src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
         dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
     ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale : src hnd=%p,dst hnd=%p, format=0x%x, transform=0x%x\n",
-        (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle), HAL_PIXEL_FORMAT_RGBA_8888, rga_transform);
+        (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle), dst_format, rga_transform);
 
     src.hnd = fb_handle;
     dst.hnd = rgaBuffer.buffer()->handle;
@@ -387,6 +390,8 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
         ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
             strerror(errno), (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle));
     }
+
+    DumpLayer("rga", dst.hnd);
 
     return ret;
 }
@@ -473,7 +478,8 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_h
         ALOGE("rgaRotateScale error : %s,src hnd=%p,dst vir=%p",
             strerror(errno), (void*)fb_handle, (void*)(output_buffer));
     }
-    DumpLayer("yuv", dst.hnd);
+
+    DumpLayer("rga", dst.hnd);
 
     if(src_vir != NULL){
       hwc_unlock(fb_handle);
@@ -553,7 +559,7 @@ int EinkCompositorWorker::Rgba888ToGray256ByRga(DrmRgaBuffer &rgaBuffer,const bu
         ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
             strerror(errno), (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle));
     }
-    DumpLayer("yuv", dst.hnd);
+    DumpLayer("rga", dst.hnd);
 
 
     return ret;
@@ -629,7 +635,7 @@ int EinkCompositorWorker::RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_h
         ALOGE("rgaRotateScale error : %s,src hnd=%p,dst hnd=%p",
             strerror(errno), (void*)fb_handle, (void*)(rgaBuffer.buffer()->handle));
     }
-    DumpLayer("yuv", dst.hnd);
+    DumpLayer("rga", dst.hnd);
 
     return ret;
 }
@@ -744,12 +750,13 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
 
   char* framebuffer_base = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
+
+  output_format = hwc_get_handle_attibute(fb_handle,ATT_FORMAT);
+
   if (ebc_buf_info.panel_color == 2) {
     framebuffer_wdith = ebc_buf_info.width / 2;
     framebuffer_height = ebc_buf_info.height / 2;
-    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
   } else{
-
     return -1;
   }
 
@@ -780,11 +787,14 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
   hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&framebuffer_base);
 
-  Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.width);
+  if(output_format == HAL_PIXEL_FORMAT_RGBA_8888)
+    Rgb888_to_color_eink2((char*)gray16_buffer,(int*)(framebuffer_base),height,width,ebc_buf_info.width);
+  else if(output_format == HAL_PIXEL_FORMAT_RGB_565)
+    Rgb565_to_color_eink2((char*)gray16_buffer,(int16_t*)(framebuffer_base),height,width,ebc_buf_info.width);
 
-  if(rga_output_addr != NULL){
+  if(framebuffer_base != NULL){
     hwc_unlock(src_hnd);
-    rga_output_addr = NULL;
+    framebuffer_base = NULL;
   }
 
   return 0;
@@ -1044,6 +1054,41 @@ int EinkCompositorWorker::update_fullmode_num(){
   return 0;
 }
 
+int EinkCompositorWorker::SetColorEinkMode(const buffer_handle_t       &fb_handle) {
+  ATRACE_CALL();
+
+  if(!fb_handle){
+    ALOGE("%s,line=%d fb_handle is null",__FUNCTION__,__LINE__);
+    return -1;
+  }
+
+  switch(gCurrentEpdMode){
+    case EPD_A2:
+      ConvertToColorEink2(fb_handle);
+      A2Commit();
+      break;
+    case EPD_SUSPEND:
+       // release_wake_lock("show_advt_lock");
+      break;
+    case EPD_RESUME:
+      ConvertToColorEink2(fb_handle);
+      Y4Commit(gCurrentEpdMode);
+      break;
+    case EPD_PART_EINK:
+    case EPD_FULL_EINK:
+      ConvertToColorEink2(fb_handle);
+      EinkCommit(gCurrentEpdMode);
+      break;
+    default:
+      ConvertToColorEink2(fb_handle);
+      Y4Commit(gCurrentEpdMode);
+      break;
+  }
+  update_fullmode_num();
+
+  return 0;
+}
+
 int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
   ATRACE_CALL();
 
@@ -1069,14 +1114,6 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
       ConvertToY8(fb_handle);
       EinkCommit(gCurrentEpdMode);
       break;
-//    case EPD_COLOR_EINK1:
-//      ConvertToColorEink1(fb_handle);
-//      ColorCommit(gCurrentEpdMode);
-//      break;
-//    case EPD_COLOR_EINK1:
-//      ConvertToColorEink2(fb_handle);
-//      ColorCommit(gCurrentEpdMode);
-//      break;
     default:
       ConvertToY4Dither(fb_handle);
       Y4Commit(gCurrentEpdMode);
@@ -1086,7 +1123,6 @@ int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
 
   return 0;
 }
-
 
 void EinkCompositorWorker::Compose(
     std::unique_ptr<EinkComposition> composition) {
@@ -1118,7 +1154,10 @@ void EinkCompositorWorker::Compose(
     }
   }
   if(isSupportRkRga()){
-    ret = SetEinkMode(composition->fb_handle);
+    if(ebc_buf_info.panel_color == 2)
+      ret = SetColorEinkMode(composition->fb_handle);
+    else
+      ret = SetEinkMode(composition->fb_handle);
     if (ret){
       for(int i = 0; i < MaxRgaBuffers; i++) {
         rgaBuffers[i].Clear();

@@ -173,8 +173,8 @@ class EinkCompositorWorker : public Worker {
   int DumpEinkSurface(int *buffer);
   int PostEink(int *buffer, Rect rect, int mode);
   int PostEinkY8(int *buffer, Rect rect, int mode);
-  int SetEinkMode(const buffer_handle_t &fb_handle);
-  int SetColorEinkMode(const buffer_handle_t &fb_handle);
+  int SetEinkMode(EinkComposition *composition);
+  int SetColorEinkMode(EinkComposition *composition);
   void Compose(std::unique_ptr<EinkComposition> composition);
 
   bool isSupportRkRga() {
@@ -198,10 +198,8 @@ class EinkCompositorWorker : public Worker {
   void *ebc_buffer_base = NULL;
   struct ebc_buf_info_t ebc_buf_info;
   struct ebc_buf_info_t commit_buf_info;
-
   int gLastEpdMode = EPD_PART_GC16;
-  int gCurrentEpdMode = EPD_PART_GC16;
-  int gResetEpdMode = EPD_PART_GC16;
+
   Region gLastA2Region;
   Region gSavedUpdateRegion;
 

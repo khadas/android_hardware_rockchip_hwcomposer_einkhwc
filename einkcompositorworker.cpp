@@ -141,8 +141,6 @@ void EinkCompositorWorker::QueueComposite(hwc_display_contents_1_t *dc,int Curre
   ATRACE_CALL();
 
   std::unique_ptr<EinkComposition> composition(new EinkComposition);
-  gCurrentEpdMode = CurrentEpdMode;
-  gResetEpdMode = ResetEpdMode;
   composition->einkMode = -1;
   composition->fb_handle = NULL;
 
@@ -1056,34 +1054,34 @@ int EinkCompositorWorker::update_fullmode_num(){
   return 0;
 }
 
-int EinkCompositorWorker::SetColorEinkMode(const buffer_handle_t       &fb_handle) {
+int EinkCompositorWorker::SetColorEinkMode(EinkComposition *composition) {
   ATRACE_CALL();
 
-  if(!fb_handle){
-    ALOGE("%s,line=%d fb_handle is null",__FUNCTION__,__LINE__);
+  if(!composition){
+    ALOGE("%s,line=%d composition is null",__FUNCTION__,__LINE__);
     return -1;
   }
 
-  switch(gCurrentEpdMode){
+  switch(composition->einkMode){
     case EPD_A2:
-      ConvertToColorEink2(fb_handle);
+      ConvertToColorEink2(composition->fb_handle);
       A2Commit();
       break;
     case EPD_SUSPEND:
        // release_wake_lock("show_advt_lock");
       break;
     case EPD_RESUME:
-      ConvertToColorEink2(fb_handle);
-      Y4Commit(gCurrentEpdMode);
+      ConvertToColorEink2(composition->fb_handle);
+      Y4Commit(composition->einkMode);
       break;
     case EPD_PART_EINK:
     case EPD_FULL_EINK:
-      ConvertToColorEink2(fb_handle);
-      EinkCommit(gCurrentEpdMode);
+      ConvertToColorEink2(composition->fb_handle);
+      EinkCommit(composition->einkMode);
       break;
     default:
-      ConvertToColorEink2(fb_handle);
-      Y4Commit(gCurrentEpdMode);
+      ConvertToColorEink2(composition->fb_handle);
+      Y4Commit(composition->einkMode);
       break;
   }
   update_fullmode_num();
@@ -1091,34 +1089,34 @@ int EinkCompositorWorker::SetColorEinkMode(const buffer_handle_t       &fb_handl
   return 0;
 }
 
-int EinkCompositorWorker::SetEinkMode(const buffer_handle_t       &fb_handle) {
+int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
   ATRACE_CALL();
 
-  if(!fb_handle){
-    ALOGE("%s,line=%d fb_handle is null",__FUNCTION__,__LINE__);
+  if(!composition){
+    ALOGE("%s,line=%d composition is null",__FUNCTION__,__LINE__);
     return -1;
   }
 
-  switch(gCurrentEpdMode){
+  switch(composition->einkMode){
     case EPD_A2:
-      ConvertToY1Dither(fb_handle);
+      ConvertToY1Dither(composition->fb_handle);
       A2Commit();
       break;
     case EPD_SUSPEND:
        // release_wake_lock("show_advt_lock");
       break;
     case EPD_RESUME:
-      ConvertToY4Dither(fb_handle);
-      Y4Commit(gCurrentEpdMode);
+      ConvertToY4Dither(composition->fb_handle);
+      Y4Commit(composition->einkMode);
       break;
     case EPD_PART_EINK:
     case EPD_FULL_EINK:
-      ConvertToY8(fb_handle);
-      EinkCommit(gCurrentEpdMode);
+      ConvertToY8(composition->fb_handle);
+      EinkCommit(composition->einkMode);
       break;
     default:
-      ConvertToY4Dither(fb_handle);
-      Y4Commit(gCurrentEpdMode);
+      ConvertToY4Dither(composition->fb_handle);
+      Y4Commit(composition->einkMode);
       break;
   }
   update_fullmode_num();
@@ -1157,9 +1155,9 @@ void EinkCompositorWorker::Compose(
   }
   if(isSupportRkRga()){
     if(ebc_buf_info.panel_color == 2)
-      ret = SetColorEinkMode(composition->fb_handle);
+      ret = SetColorEinkMode(composition.get());
     else
-      ret = SetEinkMode(composition->fb_handle);
+      ret = SetEinkMode(composition.get());
     if (ret){
       for(int i = 0; i < MaxRgaBuffers; i++) {
         rgaBuffers[i].Clear();

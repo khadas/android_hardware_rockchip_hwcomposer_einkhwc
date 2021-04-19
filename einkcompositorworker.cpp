@@ -112,20 +112,26 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
   ebc_fd = open("/dev/ebc", O_RDWR,0);
   if (ebc_fd < 0){
       ALOGE("open /dev/ebc failed\n");
+      return -1;
   }
   memset(&ebc_buf_info,0x00,sizeof(struct ebc_buf_info_t));
   if(ioctl(ebc_fd, EBC_GET_BUFFER_INFO,&ebc_buf_info)!=0){
       ALOGE("EBC_GET_BUFFER_INFO failed\n");
+      close(ebc_fd);
+      return -1;
   }
   ebc_buffer_base = mmap(0, EINK_FB_SIZE*4, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
   if (ebc_buffer_base == MAP_FAILED) {
       ALOGE("Error mapping the ebc buffer (%s)\n", strerror(errno));
+      close(ebc_fd);
+      return -1;
   }
 
   if(ioctl(ebc_fd, EBC_GET_BUFFER,&commit_buf_info)!=0)
   {
      ALOGE("EBC_GET_BUFFER failed\n");
-    return -1;
+     close(ebc_fd);
+     return -1;
   }
 
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);

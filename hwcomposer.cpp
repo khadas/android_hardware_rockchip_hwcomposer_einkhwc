@@ -2311,14 +2311,19 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
   ebc_fd = open("/dev/ebc", O_RDWR,0);
   if (ebc_fd < 0){
       ALOGE("open /dev/ebc failed\n");
+      return -1;
   }
 
   if(ioctl(ebc_fd, EBC_GET_BUFFER_INFO,&ebc_buf_info)!=0){
       ALOGE("EBC_GET_BUFFER_INFO failed\n");
+      close(ebc_fd);
+      return -1;
   }
   ebc_buffer_base = mmap(0, EINK_FB_SIZE*4, PROT_READ|PROT_WRITE, MAP_SHARED, ebc_fd, 0);
   if (ebc_buffer_base == MAP_FAILED) {
       ALOGE("Error mapping the ebc buffer (%s)\n", strerror(errno));
+      close(ebc_fd);
+      return -1;
   }
 
   hwc_init_version();

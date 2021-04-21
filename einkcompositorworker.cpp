@@ -353,10 +353,10 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     dst_l = 0;
     dst_t = 0;
     if (ebc_buf_info.panel_color == 2) {
-      src_w = ebc_buf_info.width/2;// - ((ebc_buf_info.width/2) % 8);
-      src_h = ebc_buf_info.height/2;// - ((ebc_buf_info.height/2) % 2);
-      dst_w = ebc_buf_info.width/2;// - ((ebc_buf_info.width/2) % 8);
-      dst_h = ebc_buf_info.height/2;// - ((ebc_buf_info.height/2) % 2);
+      src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+      src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
+      dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+      dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
     }else {
       src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
       src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
@@ -763,8 +763,8 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
   output_format = hwc_get_handle_attibute(fb_handle,ATT_FORMAT);
 
   if (ebc_buf_info.panel_color == 2) {
-    framebuffer_wdith = ebc_buf_info.width / 2;
-    framebuffer_height = ebc_buf_info.height / 2;
+    framebuffer_wdith = ebc_buf_info.width;
+    framebuffer_height = ebc_buf_info.height;
   } else{
     return -1;
   }

@@ -556,6 +556,7 @@ int EinkCompositorWorker::Rgba888ToGray256ByRga(DrmRgaBuffer &rgaBuffer,const bu
 
     src.hnd = fb_handle;
     dst.hnd = rgaBuffer.buffer()->handle;
+    dst.color_space_mode = 0x1 << 2;
     src.rotation = rga_transform;
 
     RockchipRga& rkRga(RockchipRga::get());

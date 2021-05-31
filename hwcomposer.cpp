@@ -136,8 +136,10 @@ enum panel_refresh_mode {
     EPD_SUSPEND        = 15,
     EPD_RESUME            = 16,
     EPD_POWER_OFF        = 17,
-    EPD_PART_EINK        = 18,
-    EPD_FULL_EINK        = 19,
+    EPD_OVERLAY_WHITE    = 18,
+    EPD_FORCE_FULL       = 19,
+    EPD_PART_EINK        = 20,
+    EPD_FULL_EINK        = 21,
 };
 
 /*
@@ -1047,9 +1049,9 @@ void Rgb888_to_color_eink(char *dst,int *src,int  fb_height, int fb_width,int vi
 }
 
 #if 0
-//Ëã·¨1
-//²ÊÉ«·Ö±æÂÊÊÇÔ­Ê¼ºÚ°×·Ö±æÂÊµÄ1/4£¬w = W/2; h = H/2;
-#if 1 //ÓÅ»¯Ëã·¨£¬Õë¶ÔËã·¨1
+//ç®—æ³•1
+//å½©è‰²åˆ†è¾¨ç‡æ˜¯åŸå§‹é»‘ç™½åˆ†è¾¨ç‡çš„1/4ï¼Œw = W/2; h = H/2;
+#if 1 //ä¼˜åŒ–ç®—æ³•ï¼Œé’ˆå¯¹ç®—æ³•1
 #pragma pack(push,1)
 typedef union {
     struct {
@@ -1323,7 +1325,7 @@ void Rgb565_to_color_eink2(char *dst, int16_t *src, int fb_height, int fb_width,
     }
 }
 #else
-//Ëã·¨1£¬Ô­Ê¼Ëã·¨
+//ç®—æ³•1ï¼ŒåŸå§‹ç®—æ³•
 /*for weifeng color panel, rgb888, Algorithm 1*/
 void Rgb888_to_color_eink2(char *dst,int *src,int  fb_height, int fb_width, int vir_width)
 {
@@ -1507,9 +1509,9 @@ void Rgb888_to_color_eink2(char *dst,int *src,int  fb_height, int fb_width, int 
 #endif
 #else
 #if 0
-//Ëã·¨2
-//²ÊÉ«·Ö±æÂÊµÈÓÚÔ­Ê¼µÄºÚ°×·Ö±æÂÊ
-//Ô­Ê¼Ëã·¨
+//ç®—æ³•2
+//å½©è‰²åˆ†è¾¨ç‡ç­‰äºåŸå§‹çš„é»‘ç™½åˆ†è¾¨ç‡
+//åŸå§‹ç®—æ³•
 //for weifeng color panel, rgb888, Algorithm 2
 void Rgb888_to_color_eink2(char *dst, int *src, int  fb_height, int fb_width, int vir_width)
 {
@@ -1714,10 +1716,10 @@ void Rgb888_to_color_eink2(char *dst, int *src, int  fb_height, int fb_width, in
 	}
 }
 #else
-//Ëã·¨2
-//²ÊÉ«·Ö±æÂÊµÈÓÚÔ­Ê¼µÄºÚ°×·Ö±æÂÊ
-//ÓÅ»¯Ëã·¨£¬Õë¶ÔËã·¨2£¬ÏÖÔÚÄ¬ÈÏ×ßÕâÀï
-//for weifeng color panel, rgb888, Algorithm 2
+//ç®—æ³•2
+////å½©è‰²åˆ†è¾¨ç‡ç­‰äºåŸå§‹çš„é»‘ç™½åˆ†è¾¨ç‡
+////ä¼˜åŒ–ç®—æ³•ï¼Œé’ˆå¯¹ç®—æ³•2ï¼Œç°åœ¨é»˜è®¤èµ°è¿™é‡Œ
+////for weifeng color panel, rgb888, Algorithm 2
 #define RGB888_AVG_RGB(r1, r2, r, g, b)    do { \
 	uint32_t s1 = (r1[0]) & 0x00F0F0F0; \
 	uint32_t s2 = (r1[1]) & 0x00F0F0F0; \
@@ -1790,10 +1792,10 @@ void Rgb888_to_color_eink2(char *dst, int *src, int fb_height, int fb_width, int
 #endif
 #endif
 
-//Ëã·¨1
-//²ÊÉ«·Ö±æÂÊÊÇÔ­Ê¼ºÚ°×·Ö±æÂÊµÄ1/4£¬w = W/2; h = H/2;
-//Ô­Ê¼Ëã·¨£¬Ê¹ÓÃRGB888Êı¾İ£¬ËùÒÔ²»»á×ßÕâÀï
-//for weifeng color panel, rgb565, Algorithm 1
+// ç®—æ³•1
+// å½©è‰²åˆ†è¾¨ç‡æ˜¯åŸå§‹é»‘ç™½åˆ†è¾¨ç‡çš„1/4ï¼Œw = W/2; h = H/2;
+// åŸå§‹ç®—æ³•ï¼Œä½¿ç”¨RGB888æ•°æ®ï¼Œæ‰€ä»¥ä¸ä¼šèµ°è¿™é‡Œ
+// for weifeng color panel, rgb565, Algorithm 1
 // ARM gralloc è®¤ä¸º Android å®šä¹‰ HAL_PIXEL_FORMAT_RGB_565ï¼ŒDRMå®šä¹‰ä¸ºDRM_FORMAT_RGB565ï¼Œå†…å­˜æ’åˆ—ä¸º[15:0] R:G:B 5:6:5
 void Rgb565_to_color_eink2(char *dst,int16_t *src,int  fb_height, int fb_width, int vir_width)
 {
@@ -2332,7 +2334,7 @@ static int hwc_handle_eink_mode(int mode){
       int one_full_mode_timeline = atoi(value);
       if(gOneFullModeTime != one_full_mode_timeline){
         gOneFullModeTime = one_full_mode_timeline;
-        gCurrentEpdMode = EPD_FULL_GC16;
+        gCurrentEpdMode = EPD_FORCE_FULL;
       }else{
         gCurrentEpdMode = mode;
       }
@@ -2353,8 +2355,6 @@ static int hwc_set(hwc_composer_device_1_t *dev, size_t num_displays,
   property_get("sys.eink.mode", value, "0");
   int requestEpdMode = atoi(value);
 
-  property_get("sys.eink.one_full_mode_timeline", value, "0");
-  int one_full_mode_timeline = atoi(value);
   //Handle eink mode.
   ret = hwc_handle_eink_mode(requestEpdMode);
 

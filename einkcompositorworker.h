@@ -94,8 +94,10 @@ enum panel_refresh_mode {
 	EPD_SUSPEND			= 15,
 	EPD_RESUME			= 16,
 	EPD_POWER_OFF		= 17,
-	EPD_PART_EINK		= 18,
-	EPD_FULL_EINK		= 19,
+    EPD_OVERLAY_WHITE   = 18,
+    EPD_FORCE_FULL      = 19,
+	EPD_PART_EINK		= 20,
+	EPD_FULL_EINK		= 21,
 };
 
 /*

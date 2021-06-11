@@ -1107,6 +1107,10 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
   }
 
   switch(composition->einkMode){
+    case EPD_DU:
+      ConvertToY1Dither(composition->fb_handle);
+      Y4Commit(composition->einkMode);
+      break;
     case EPD_A2:
       ConvertToY1Dither(composition->fb_handle);
       A2Commit();

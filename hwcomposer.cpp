@@ -132,13 +132,17 @@ enum panel_refresh_mode {
     EPD_PART_GCC16        = 11,
     EPD_A2                = 12,
     EPD_DU                = 13,
-    EPD_RESET            = 14,
-    EPD_SUSPEND        = 15,
-    EPD_RESUME            = 16,
-    EPD_POWER_OFF        = 17,
-    EPD_FORCE_FULL       = 18,
-    EPD_PART_EINK        = 19,
-    EPD_FULL_EINK        = 20,
+    EPD_DU4               = 14,
+    EPD_A2_ENTER          = 15,
+    EPD_RESET            = 16,
+    EPD_SUSPEND        = 17,
+    EPD_RESUME            = 18,
+    EPD_POWER_OFF        = 19,
+    EPD_FORCE_FULL       = 20,
+
+//test mode, no use
+    EPD_PART_EINK        = 21,
+    EPD_FULL_EINK        = 22,
 };
 
 /*
@@ -2261,7 +2265,7 @@ int hwc_post_epd_logo(const char src_path[]) {
         ALOGD_IF(log_level(DBG_DEBUG), "%s,line = %d", __FUNCTION__, __LINE__);
         //EPD post
         Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-        hwc_post_epd(gray16_buffer_bak, rect, EPD_DU);
+        hwc_post_epd(gray16_buffer_bak, rect, EPD_PART_GC16);
     }
 
     if (ebc_buf_info.panel_color == 2)
@@ -2300,6 +2304,7 @@ static int hwc_adajust_sf_vsync(int mode){
       strcpy(refresh_skip_count, "5");
       break;
     case EPD_DU:
+    case EPD_DU4:
       strcpy(refresh_skip_count, "5");
       break;
     default:

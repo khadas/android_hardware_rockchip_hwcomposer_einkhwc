@@ -1039,7 +1039,7 @@ int EinkCompositorWorker::A2Commit() {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
   int *gray16_buffer_bak = gray16_buffer;
   if(gLastEpdMode != EPD_A2)
-      epd_mode = EPD_DU;
+      epd_mode = EPD_A2_ENTER;
   else
       epd_mode = EPD_A2;
 
@@ -1108,6 +1108,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
 
   switch(composition->einkMode){
     case EPD_DU:
+    case EPD_DU4:
       ConvertToY1Dither(composition->fb_handle);
       Y4Commit(composition->einkMode);
       break;

@@ -75,28 +75,32 @@ namespace android {
  * And if you want to add new refresh modes, please appended to the tail.
  */
 enum panel_refresh_mode {
-	EPD_NULL				= -1,
+	EPD_NULL			= -1,
 	EPD_AUTO			= 0,
-	EPD_OVERLAY			= 1,
+	EPD_OVERLAY		= 1,
 	EPD_FULL_GC16		= 2,
 	EPD_FULL_GL16		= 3,
 	EPD_FULL_GLR16		= 4,
 	EPD_FULL_GLD16		= 5,
-	EPD_FULL_GCC16		= 6,
+	EPD_FULL_GCC16	= 6,
 	EPD_PART_GC16		= 7,
 	EPD_PART_GL16		= 8,
-	EPD_PART_GLR16		= 9,
-	EPD_PART_GLD16		= 10,
-	EPD_PART_GCC16		= 11,
+	EPD_PART_GLR16	= 9,
+	EPD_PART_GLD16	= 10,
+	EPD_PART_GCC16	= 11,
 	EPD_A2				= 12,
 	EPD_DU				= 13,
-	EPD_RESET			= 14,
-	EPD_SUSPEND			= 15,
-	EPD_RESUME			= 16,
-	EPD_POWER_OFF		= 17,
-    EPD_FORCE_FULL      = 18,
-	EPD_PART_EINK		= 19,
-	EPD_FULL_EINK		= 20,
+	EPD_DU4			= 14,
+	EPD_A2_ENTER		= 15,
+	EPD_RESET			= 16,
+	EPD_SUSPEND		= 17,
+	EPD_RESUME		= 18,
+	EPD_POWER_OFF	= 19,
+	EPD_FORCE_FULL	= 20,
+
+//test mode, no use
+	EPD_PART_EINK		= 21,
+	EPD_FULL_EINK		= 22,
 };
 
 /*

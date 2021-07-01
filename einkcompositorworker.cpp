@@ -1001,6 +1001,8 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
                 0, 0, width, height, (void **)&rga_output_addr);
 
   gray256_addr = rga_output_addr;
+  if(rga_output_addr == NULL)
+    ALOGE("rga_output_addr == NULL, hwc_lock maybe failed\n");
 
   Region screen_region(Rect(0, 0, ebc_buf_info.width - 1, ebc_buf_info.height -1));
   gray256_to_gray2_dither(gray256_addr,(char *)gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width,screen_region);

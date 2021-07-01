@@ -464,6 +464,7 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_h
     dst.mmuFlag = 1;
     src.mmuFlag = 1;
     src.rotation = rga_transform;
+    dst.color_space_mode = 0x1 << 2;
 		dst.dither.enable = 0;
 		dst.dither.mode = 0;
 

@@ -51,7 +51,7 @@
 #include <sched.h>
 #include <libsync/sw_sync.h>
 #include <android/sync.h>
-
+#include "libcfa/libcfa.h"
 
 namespace android {
 
@@ -93,8 +93,6 @@ EinkCompositorWorker::~EinkCompositorWorker() {
   }
   if (gray256_new_buffer != NULL)
     free(gray256_new_buffer);
-  if (rgba_new_buffer != NULL)
-    free(rgba_new_buffer);
 }
 
 int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
@@ -138,7 +136,6 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
   gray16_buffer = (int*)(vaddr_real + commit_buf_info.offset);
 
   gray256_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
-  rgba_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
 
   return InitWorker();
 }
@@ -352,17 +349,10 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     src_t = 0;
     dst_l = 0;
     dst_t = 0;
-    if (ebc_buf_info.panel_color == 2) {
-      src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
-      src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
-      dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
-      dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
-    }else {
-      src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
-      src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
-      dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
-      dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
-    }
+    src_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    src_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
+    dst_w = ebc_buf_info.width - (ebc_buf_info.width % 8);
+    dst_h = ebc_buf_info.height - (ebc_buf_info.height % 2);
 
     if(dst_w < 0 || dst_h <0 )
       ALOGE("RGA invalid dst_w=%d,dst_h=%d",dst_w,dst_h);
@@ -815,6 +805,7 @@ int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
 
   return 0;
 }
+
 int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
@@ -823,10 +814,12 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
 
   char* framebuffer_base = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
+
+  output_format = hwc_get_handle_attibute(fb_handle,ATT_FORMAT);
+
   if (ebc_buf_info.panel_color == 1) {
     framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
     framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
-    output_format = HAL_PIXEL_FORMAT_RGBA_8888;
   } else{
     return -1;
   }
@@ -858,10 +851,15 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
   hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&framebuffer_base);
 
-  if(rga_output_addr != NULL){
-    hwc_unlock(src_hnd);
-    rga_output_addr = NULL;
+  if(output_format == HAL_PIXEL_FORMAT_RGBA_8888) {
+    image_to_cfa_grayscale_gen2_ARGBB8888(width, height, (unsigned char *)framebuffer_base, (unsigned char *)gray256_new_buffer);
+    gray256_to_gray16_dither((char *)gray256_new_buffer, gray16_buffer, height, width, ebc_buf_info.width);
   }
+  if(framebuffer_base != NULL){
+    hwc_unlock(src_hnd);
+    framebuffer_base = NULL;
+  }
+
   return 0;
 }
 
@@ -1085,17 +1083,11 @@ int EinkCompositorWorker::SetColorEinkMode(EinkComposition *composition) {
     case EPD_SUSPEND:
        // release_wake_lock("show_advt_lock");
       break;
-    case EPD_RESUME:
-      ConvertToColorEink2(composition->fb_handle);
-      Y4Commit(composition->einkMode);
-      break;
-    case EPD_PART_EINK:
-    case EPD_FULL_EINK:
-      ConvertToColorEink2(composition->fb_handle);
-      EinkCommit(composition->einkMode);
-      break;
     default:
-      ConvertToColorEink2(composition->fb_handle);
+	if (ebc_buf_info.panel_color == 1)
+        ConvertToColorEink1(composition->fb_handle);
+	else
+        ConvertToColorEink2(composition->fb_handle);
       Y4Commit(composition->einkMode);
       break;
   }
@@ -1169,7 +1161,7 @@ void EinkCompositorWorker::Compose(
     }
   }
   if(isSupportRkRga()){
-    if(ebc_buf_info.panel_color == 2)
+    if(ebc_buf_info.panel_color)
       ret = SetColorEinkMode(composition.get());
     else
       ret = SetEinkMode(composition.get());

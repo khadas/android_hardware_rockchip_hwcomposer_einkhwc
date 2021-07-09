@@ -656,12 +656,10 @@ int gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_
   return 0;
 }
 
-int logo_gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int vir_w){
-  ATRACE_CALL();
-
+int logo_gray256_to_gray16(char *gray256_addr,char *gray16_buffer, int h,int w,int vir_w)
+{
   char src_data;
   char  g0,g3;
-  char *temp_dst = (char *)gray16_buffer;
 
   for(int i = 0; i < h;i++){
       for(int j = 0; j< w / 2;j++){
@@ -672,10 +670,9 @@ int logo_gray256_to_gray16(char *gray256_addr,int *gray16_buffer,int h,int w,int
           src_data = *gray256_addr;
           g3 =  src_data&0xf0;
           gray256_addr++;
-          *temp_dst = g0|g3;
-          temp_dst++;
+          *gray16_buffer = g0|g3;
+          gray16_buffer++;
       }
-      //gray256_addr += (vir_w - w);
   }
   return 0;
 }
@@ -2242,10 +2239,11 @@ int hwc_post_epd_logo(const char src_path[]) {
 
     if (ebc_buf_info.panel_color == 1) {
         image_new_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
-        image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
+        image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height);
         drawLogoPic(src_path, (void *)image_new_addr, ebc_buf_info.width, ebc_buf_info.height);
-     free(image_new_addr);
-     image_new_addr = NULL;
+        image_to_cfa_grayscale_gen2_ARGBB8888(ebc_buf_info.width, ebc_buf_info.height, (unsigned char *)image_new_addr, (unsigned char *)image_addr);
+        free(image_new_addr);
+        image_new_addr = NULL;
     }
     else if (ebc_buf_info.panel_color == 2) {
         image_addr = (char *)malloc(ebc_buf_info.width * ebc_buf_info.height * 4);
@@ -2269,7 +2267,9 @@ int hwc_post_epd_logo(const char src_path[]) {
         hwc_post_epd(gray16_buffer_bak, rect, EPD_PART_GC16);
     }
 
-    if (ebc_buf_info.panel_color == 2)
+    if (ebc_buf_info.panel_color == 1)
+        logo_gray256_to_gray16((char *)image_addr, (char *)gray16_buffer, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+    else if (ebc_buf_info.panel_color == 2)
         Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
     else
         Rgb888ToGray16ByRga((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
@@ -2548,14 +2548,8 @@ static int hwc_get_display_configs(struct hwc_composer_device_1 *dev,
     return 0;
 
   uint32_t width = 0, height = 0 , vrefresh = 0 ;
-  if (ebc_buf_info.panel_color == 2) {
-    width = ebc_buf_info.width;
-    height = ebc_buf_info.height;
-  }
-  else {
-    width = ebc_buf_info.width - (ebc_buf_info.width % 8);
-    height = ebc_buf_info.height - (ebc_buf_info.height % 2);
-  }
+  width = ebc_buf_info.width - (ebc_buf_info.width % 8);
+  height = ebc_buf_info.height - (ebc_buf_info.height % 2);
   hwc_info.framebuffer_width = width;
   hwc_info.framebuffer_height = height;
   hwc_info.vrefresh = vrefresh ? vrefresh : 60;

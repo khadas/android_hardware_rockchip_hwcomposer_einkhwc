@@ -400,7 +400,7 @@ int EinkCompositorWorker::Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_
     return ret;
 }
 
-int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_handle_t          &fb_handle) {
+int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer, const buffer_handle_t &fb_handle, int epd_mode) {
     ATRACE_CALL();
     int ret = 0;
     int rga_transform = 0;
@@ -468,11 +468,17 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer,const buffer_h
 		dst.dither.enable = 0;
 		dst.dither.mode = 0;
 
+    //A2,DU only support two greys(f,0), DU4 support greys(f,a,5,0), others support 16 greys
     uint64_t contrast_key =0;
-    char value[PROPERTY_VALUE_MAX];
-    property_get("persist.vendor.hwc.contrast_key",value,"0xffccba9876540000");
-    sscanf(value,"%" PRIx64,&contrast_key);
-
+    if ((epd_mode == EPD_A2) || (epd_mode == EPD_DU)) {
+        contrast_key = 0xffffff0000000000;
+    } else if (epd_mode == EPD_DU4) {
+        contrast_key = 0xfffffaaa55500000;
+    } else {
+        char value[PROPERTY_VALUE_MAX];
+        property_get("persist.vendor.hwc.contrast_key",value,"0xffccba9876540000");
+        sscanf(value,"%" PRIx64,&contrast_key);
+    }
     dst.dither.lut0_l = (contrast_key & 0xffff);
     dst.dither.lut0_h = (contrast_key & 0xffff0000) >> 16;
     dst.dither.lut1_l = (contrast_key & 0xffff00000000) >> 32;
@@ -904,7 +910,7 @@ int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
   return 0;
 }
 
-int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
+int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle, int epd_mode) {
 
   DumpLayer("rgba", fb_handle);
 
@@ -914,7 +920,7 @@ int EinkCompositorWorker::ConvertToY4Dither(const buffer_handle_t &fb_handle) {
   rgba_to_y4_by_rga = hwc_get_int_property("sys.eink.rgba2y4_by_rga","0") > 0;
 
   if(rgba_to_y4_by_rga){
-    int ret = Rgba888ToGray16ByRga(gray16_buffer, fb_handle);
+    int ret = Rgba888ToGray16ByRga(gray16_buffer, fb_handle, epd_mode);
     if (ret) {
       ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
       return ret;
@@ -1037,17 +1043,18 @@ int EinkCompositorWorker::Y4Commit(int epd_mode) {
   gLastEpdMode = epd_mode;
   return 0;
 }
-int EinkCompositorWorker::A2Commit() {
-  int epd_mode = EPD_NULL;
+
+int EinkCompositorWorker::A2Commit(int epd_mode) {
+  int epd_tmp_mode = EPD_NULL;
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
   int *gray16_buffer_bak = gray16_buffer;
-  if(gLastEpdMode != EPD_A2)
-      epd_mode = EPD_A2_ENTER;
+  if((gLastEpdMode != EPD_A2) && (gLastEpdMode != EPD_A2_DITHER))
+      epd_tmp_mode = EPD_A2_ENTER;
   else
-      epd_mode = EPD_A2;
+      epd_tmp_mode = epd_mode;
 
-  PostEink(gray16_buffer_bak, screen_rect, epd_mode);
-  gLastEpdMode = EPD_A2;
+  PostEink(gray16_buffer_bak, screen_rect, epd_tmp_mode);
+  gLastEpdMode = epd_mode;
   return 0;
 }
 
@@ -1075,10 +1082,6 @@ int EinkCompositorWorker::SetColorEinkMode(EinkComposition *composition) {
   }
 
   switch(composition->einkMode){
-    case EPD_A2:
-      ConvertToColorEink2(composition->fb_handle);
-      A2Commit();
-      break;
     case EPD_SUSPEND:
        // release_wake_lock("show_advt_lock");
       break;
@@ -1110,21 +1113,16 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
   }
 
   switch(composition->einkMode){
-    case EPD_DU:
-    case EPD_DU4:
+    case EPD_A2_DITHER:
       ConvertToY1Dither(composition->fb_handle);
-      Y4Commit(composition->einkMode);
+      A2Commit(EPD_A2_DITHER);
       break;
     case EPD_A2:
-      ConvertToY1Dither(composition->fb_handle);
-      A2Commit();
+      ConvertToY4Dither(composition->fb_handle, composition->einkMode);
+      A2Commit(EPD_A2);
       break;
     case EPD_SUSPEND:
        // release_wake_lock("show_advt_lock");
-      break;
-    case EPD_RESUME:
-      ConvertToY4Dither(composition->fb_handle);
-      Y4Commit(composition->einkMode);
       break;
     case EPD_PART_EINK:
     case EPD_FULL_EINK:
@@ -1132,7 +1130,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
       EinkCommit(composition->einkMode);
       break;
     default:
-      ConvertToY4Dither(composition->fb_handle);
+      ConvertToY4Dither(composition->fb_handle, composition->einkMode);
       Y4Commit(composition->einkMode);
       break;
   }

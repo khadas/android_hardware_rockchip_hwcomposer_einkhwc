@@ -89,18 +89,19 @@ enum panel_refresh_mode {
 	EPD_PART_GLD16	= 10,
 	EPD_PART_GCC16	= 11,
 	EPD_A2				= 12,
-	EPD_DU				= 13,
-	EPD_DU4			= 14,
-	EPD_A2_ENTER		= 15,
-	EPD_RESET			= 16,
-	EPD_SUSPEND		= 17,
-	EPD_RESUME		= 18,
-	EPD_POWER_OFF	= 19,
-	EPD_FORCE_FULL	= 20,
+	EPD_A2_DITHER        = 13,
+	EPD_DU				= 14,
+	EPD_DU4			= 15,
+	EPD_A2_ENTER		= 16,
+	EPD_RESET			= 17,
+	EPD_SUSPEND		= 18,
+	EPD_RESUME		= 19,
+	EPD_POWER_OFF	= 20,
+	EPD_FORCE_FULL	= 21,
 
 //test mode, no use
-	EPD_PART_EINK		= 21,
-	EPD_FULL_EINK		= 22,
+	EPD_PART_EINK		= 22,
+	EPD_FULL_EINK		= 23,
 };
 
 /*
@@ -163,17 +164,17 @@ class EinkCompositorWorker : public Worker {
   int FinishComposition(int timeline);
   int Rgba888ToGray256ByRga(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
-  int Rgba888ToGray16ByRga(int *output_buffer,const buffer_handle_t          &fb_handle);
+  int Rgba888ToGray16ByRga(int *output_buffer,const buffer_handle_t          &fb_handle, int epd_mode);
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int ConvertToColorEink1(const buffer_handle_t &fb_handle);
   int ConvertToColorEink2(const buffer_handle_t &fb_handle);
   int ConvertToY8(const buffer_handle_t &fb_handle);
-  int ConvertToY4Dither(const buffer_handle_t &fb_handle);
+  int ConvertToY4Dither(const buffer_handle_t &fb_handle, int epd_mode);
   int ConvertToY1Dither(const buffer_handle_t &fb_handle);
   int ColorCommit(int epd_mode);
   int EinkCommit(int epd_mode);
   int Y4Commit(int epd_mode);
-  int A2Commit();
+  int A2Commit(int epd_mode);
   int update_fullmode_num();
   int DumpEinkSurface(int *buffer);
   int PostEink(int *buffer, Rect rect, int mode);

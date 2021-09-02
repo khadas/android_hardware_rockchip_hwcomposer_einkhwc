@@ -140,10 +140,6 @@ enum panel_refresh_mode {
     EPD_RESUME            = 19,
     EPD_POWER_OFF        = 20,
     EPD_FORCE_FULL       = 21,
-
-//test mode, no use
-    EPD_PART_EINK        = 22,
-    EPD_FULL_EINK        = 23,
 };
 
 /*

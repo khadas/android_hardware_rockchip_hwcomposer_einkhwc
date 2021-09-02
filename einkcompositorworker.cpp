@@ -52,6 +52,7 @@
 #include <libsync/sw_sync.h>
 #include <android/sync.h>
 #include "libcfa/libcfa.h"
+#include "libregal/libeink.h"
 
 namespace android {
 
@@ -77,6 +78,11 @@ EinkCompositorWorker::~EinkCompositorWorker() {
     close(ebc_fd);
     ebc_fd = -1;
   }
+  munmap(waveform_base, 0x100000);
+  if (waveform_fd > 0) {
+    close(waveform_fd);
+    waveform_fd = -1;
+  }
   if(rga_output_addr != NULL){
     //Get virtual address
     const gralloc_module_t *gralloc;
@@ -93,6 +99,19 @@ EinkCompositorWorker::~EinkCompositorWorker() {
   }
   if (gray256_new_buffer != NULL)
     free(gray256_new_buffer);
+}
+
+const char *pvi_wf_get_version(const char *waveform)
+{
+	static char spi_id_buffer[32];
+	int i;
+
+	for (i = 0; i < 31; i++)
+		spi_id_buffer[i] = waveform[i + 0x41];
+
+	spi_id_buffer[31] = '\0';
+
+	return (const char *)spi_id_buffer;
 }
 
 int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
@@ -137,6 +156,30 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
 
   gray256_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
 
+  //init waveform for eink regal mode
+  waveform_fd = open("/dev/waveform", O_RDWR,0);
+  if (waveform_fd < 0) {
+      ALOGE("open /dev/waveform failed\n");
+      goto OUT;
+  }
+  waveform_base = mmap(0, 0x100000, PROT_READ|PROT_WRITE, MAP_SHARED, waveform_fd, 0);
+  if (waveform_base == MAP_FAILED) {
+      ALOGE("Error mapping the waveform buffer (%s)\n", strerror(errno));
+      close(waveform_fd);
+      waveform_fd = -1;
+      goto OUT;
+  }
+  ALOGD("waveform version: %s\n", pvi_wf_get_version((char *)waveform_base));
+  ret = EInk_Init((char *)waveform_base);
+  if (ret) {
+      ALOGE("EInk_Init error, ret = %d\n", ret);
+      close(waveform_fd);
+      waveform_fd = -1;
+      goto OUT;
+  }
+  ALOGD("eink regal lib init success\n");
+
+OUT:
   return InitWorker();
 }
 
@@ -863,7 +906,7 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
   return 0;
 }
 
-int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
+int EinkCompositorWorker::ConvertToY4Regal(const buffer_handle_t &fb_handle) {
 
   DumpLayer("rgba", fb_handle);
 
@@ -900,7 +943,10 @@ int EinkCompositorWorker::ConvertToY8(const buffer_handle_t &fb_handle) {
   hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
                 0, 0, width, height, (void **)&rga_output_addr);
 
-  memcpy(gray256_new_buffer,rga_output_addr,ebc_buf_info.width * ebc_buf_info.height);
+  eink_process((uint8_t *)rga_output_addr, (uint8_t *)gray256_new_buffer, ebc_buf_info.width, ebc_buf_info.height);
+  memcpy(gray256_new_buffer, rga_output_addr, ebc_buf_info.width * ebc_buf_info.height);
+  gray256_to_gray16_dither((char *)rga_output_addr, gray16_buffer, height, width, ebc_buf_info.width);
+
   if(rga_output_addr != NULL){
     hwc_unlock(src_hnd);
     rga_output_addr = NULL;
@@ -1116,11 +1162,13 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
     case EPD_SUSPEND:
        // release_wake_lock("show_advt_lock");
       break;
-    case EPD_PART_EINK:
-    case EPD_FULL_EINK:
-      ConvertToY8(composition->fb_handle);
-      EinkCommit(composition->einkMode);
-      break;
+    case EPD_FULL_GLD16:
+    case EPD_FULL_GLR16:
+      if (waveform_fd > 0) {
+          ConvertToY4Regal(composition->fb_handle);
+          Y4Commit(composition->einkMode);
+          break;
+      }
     default:
       ConvertToY4Dither(composition->fb_handle, composition->einkMode);
       Y4Commit(composition->einkMode);

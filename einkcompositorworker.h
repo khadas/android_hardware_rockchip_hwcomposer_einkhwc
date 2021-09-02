@@ -98,10 +98,6 @@ enum panel_refresh_mode {
 	EPD_RESUME		= 19,
 	EPD_POWER_OFF	= 20,
 	EPD_FORCE_FULL	= 21,
-
-//test mode, no use
-	EPD_PART_EINK		= 22,
-	EPD_FULL_EINK		= 23,
 };
 
 /*
@@ -168,7 +164,7 @@ class EinkCompositorWorker : public Worker {
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int ConvertToColorEink1(const buffer_handle_t &fb_handle);
   int ConvertToColorEink2(const buffer_handle_t &fb_handle);
-  int ConvertToY8(const buffer_handle_t &fb_handle);
+  int ConvertToY4Regal(const buffer_handle_t &fb_handle);
   int ConvertToY4Dither(const buffer_handle_t &fb_handle, int epd_mode);
   int ConvertToY1Dither(const buffer_handle_t &fb_handle);
   int ColorCommit(int epd_mode);
@@ -202,6 +198,8 @@ class EinkCompositorWorker : public Worker {
 
   int ebc_fd = -1;
   void *ebc_buffer_base = NULL;
+  int waveform_fd = -1;
+  void *waveform_base = NULL;
   struct ebc_buf_info_t ebc_buf_info;
   struct ebc_buf_info_t commit_buf_info;
   int gLastEpdMode = EPD_PART_GC16;

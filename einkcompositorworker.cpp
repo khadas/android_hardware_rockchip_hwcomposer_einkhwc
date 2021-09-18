@@ -1169,6 +1169,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
           Y4Commit(composition->einkMode);
           break;
       }
+      FALLTHROUGH_INTENDED;
     default:
       ConvertToY4Dither(composition->fb_handle, composition->einkMode);
       Y4Commit(composition->einkMode);

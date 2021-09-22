@@ -2287,8 +2287,16 @@ int hwc_post_epd_logo(const char src_path[]) {
 
     return 0;
 }
+
 static int hwc_adajust_sf_vsync(int mode){
   static int last_mode = EPD_NULL;
+  static int resume_count = 5;
+
+  if ((last_mode == EPD_SUSPEND) && (mode != EPD_RESUME))
+    return 0;
+
+  if (last_mode == EPD_RESUME && resume_count--)
+    return 0;
 
   if(mode == last_mode)
     return 0;
@@ -2304,6 +2312,13 @@ static int hwc_adajust_sf_vsync(int mode){
     case EPD_DU:
     case EPD_DU4:
       strcpy(refresh_skip_count, "5");
+      break;
+    case EPD_RESUME:
+      resume_count = 5;
+      strcpy(refresh_skip_count, "29");
+      break;
+    case EPD_SUSPEND:
+      strcpy(refresh_skip_count, "29");
       break;
     default:
       strcpy(refresh_skip_count, "2");
@@ -2460,7 +2475,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gPowerMode = EPD_SUSPEND;
       gCurrentEpdMode = EPD_SUSPEND;
       ALOGD("%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
-
+      hwc_adajust_sf_vsync(EPD_SUSPEND);
       char power_status[255];
       char power_connected[255];
       property_get("sys.power.status",power_status, "0");
@@ -2501,6 +2516,7 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
       gPowerMode = EPD_RESUME;
       gCurrentEpdMode = EPD_FULL_GC16;
       not_fullmode_count = 50;
+      hwc_adajust_sf_vsync(EPD_RESUME);
       break;
   }
   return 0;

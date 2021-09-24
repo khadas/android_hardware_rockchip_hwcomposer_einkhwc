@@ -503,9 +503,9 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer, const buffer_
 
     //A2,DU only support two greys(f,0), DU4 support greys(f,a,5,0), others support 16 greys
     uint64_t contrast_key =0;
-    if ((epd_mode == EPD_A2) || (epd_mode == EPD_DU)) {
+    if ((epd_mode == EPD_A2) || (epd_mode == EPD_DU) || (epd_mode == EPD_AUTO_DU)) {
         contrast_key = 0xffffff0000000000;
-    } else if (epd_mode == EPD_DU4) {
+    } else if ((epd_mode == EPD_DU4) || (epd_mode == EPD_AUTO_DU4)) {
         contrast_key = 0xfffffaaa55500000;
     } else {
         char value[PROPERTY_VALUE_MAX];

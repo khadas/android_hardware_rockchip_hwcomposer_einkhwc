@@ -502,16 +502,20 @@ int EinkCompositorWorker::Rgba888ToGray16ByRga(int *output_buffer, const buffer_
 		dst.dither.mode = 0;
 
     //A2,DU only support two greys(f,0), DU4 support greys(f,a,5,0), others support 16 greys
-    uint64_t contrast_key =0;
+    uint64_t contrast_key =0xfedcba9876543210;
     if ((epd_mode == EPD_A2) || (epd_mode == EPD_DU) || (epd_mode == EPD_AUTO_DU)) {
         contrast_key = 0xffffff0000000000;
     } else if ((epd_mode == EPD_DU4) || (epd_mode == EPD_AUTO_DU4)) {
         contrast_key = 0xfffffaaa55500000;
-    } else {
+    }
+//使用新的对比度调节方法debug.sf.gamma.gamma，不再使用persist.vendor.hwc.contrast_key属性
+/*
+    else {
         char value[PROPERTY_VALUE_MAX];
         property_get("persist.vendor.hwc.contrast_key",value,"0xffccba9876540000");
         sscanf(value,"%" PRIx64,&contrast_key);
     }
+*/
     dst.dither.lut0_l = (contrast_key & 0xffff);
     dst.dither.lut0_h = (contrast_key & 0xffff0000) >> 16;
     dst.dither.lut1_l = (contrast_key & 0xffff00000000) >> 32;

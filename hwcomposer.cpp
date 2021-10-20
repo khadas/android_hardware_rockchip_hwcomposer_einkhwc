@@ -2297,8 +2297,13 @@ static int hwc_adajust_sf_vsync(int mode){
   if ((last_mode == EPD_SUSPEND) && (mode != EPD_RESUME))
     return 0;
 
-  if (last_mode == EPD_RESUME && resume_count--)
+  if ((last_mode == EPD_RESUME) && (mode == EPD_SUSPEND))
+    resume_count = 0;
+
+  if ((last_mode == EPD_RESUME) && (resume_count > 0)) {
+    resume_count--;
     return 0;
+  }
 
   if(mode == last_mode)
     return 0;
@@ -2514,10 +2519,10 @@ static int hwc_set_power_mode(struct hwc_composer_device_1 *dev, int display,
      break;
     case HWC_POWER_MODE_DOZE_SUSPEND:
     case HWC_POWER_MODE_NORMAL:
-      ALOGD("%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
       gPowerMode = EPD_RESUME;
       gCurrentEpdMode = EPD_FULL_GC16;
       not_fullmode_count = 50;
+      ALOGD("%s,line = %d , mode = %d , gPowerMode = %d,gCurrentEpdMode = %d",__FUNCTION__,__LINE__,mode,gPowerMode,gCurrentEpdMode);
       hwc_adajust_sf_vsync(EPD_RESUME);
       break;
   }

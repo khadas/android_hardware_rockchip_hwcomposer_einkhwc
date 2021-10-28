@@ -1747,7 +1747,7 @@ void Rgb888_to_color_eink2(char *dst, int *src, int fb_height, int fb_width, int
 		src_r1 = src;
 		src_r2 = src + vir_width;
 		int row_mod3 = i % 3;
-		if (row_mod3 == 0) {
+		if (row_mod3 == 1) {
 			for (j = 0; j < w_div6; j++) {
 				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
 				*dst_r1++ = r | (b<<4);
@@ -1758,20 +1758,20 @@ void Rgb888_to_color_eink2(char *dst, int *src, int fb_height, int fb_width, int
 				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
 				*dst_r1++ = b | (g<<4);
 				*dst_r2++ = r | (b<<4);
-			}
-		} else if (row_mod3 == 1) {
-			for (j = 0; j < w_div6; j++) {
-				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
-				*dst_r1++ = b | (g<<4);
-				*dst_r2++ = r | (b<<4);
-				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
-				*dst_r1++ = r | (b<<4);
-				*dst_r2++ = g | (r<<4);
-				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
-				*dst_r1++ = g | (r<<4);
-				*dst_r2++ = b | (g<<4);
 			}
 		} else if (row_mod3 == 2) {
+			for (j = 0; j < w_div6; j++) {
+				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
+				*dst_r1++ = b | (g<<4);
+				*dst_r2++ = r | (b<<4);
+				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
+				*dst_r1++ = r | (b<<4);
+				*dst_r2++ = g | (r<<4);
+				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
+				*dst_r1++ = g | (r<<4);
+				*dst_r2++ = b | (g<<4);
+			}
+		} else if (row_mod3 == 0) {
 			for (j = 0; j < w_div6; j++) {
 				RGB888_AVG_RGB(src_r1, src_r2, r, g, b);
 				*dst_r1++ = g | (r<<4);

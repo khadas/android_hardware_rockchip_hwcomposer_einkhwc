@@ -2214,12 +2214,12 @@ int Rgb888ToGray16ByRga(char *dst_buf,int *src_buf,int  fb_height, int fb_width,
     src.rotation = 0;
     dst.dither.enable = 0;
     dst.dither.mode = 0;
+    dst.color_space_mode = 0x1 << 2;
 
-    dst.dither.lut0_l = 0x0000;
+    dst.dither.lut0_l = 0x3210;
     dst.dither.lut0_h = 0x7654;
     dst.dither.lut1_l = 0xba98;
-    dst.dither.lut1_h = 0xffcc;
-
+    dst.dither.lut1_h = 0xfedc;
     ret = rkRga.RkRgaBlit(&src, &dst, NULL);
     if(ret) {
         ALOGE("rgaRotateScale error : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",

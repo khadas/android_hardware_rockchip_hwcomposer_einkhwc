@@ -159,6 +159,7 @@ struct ebc_buf_info {
     int win_y2;
     int width_mm;
     int height_mm;
+    int needpic; //16 or 32
 };
 
 struct win_coordinate{
@@ -2079,6 +2080,7 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
   buf_info.win_y1 = rect.top;
   buf_info.win_y2 = rect.bottom;
   buf_info.epd_mode = mode;
+  buf_info.needpic = 16;
 
 
   char value[PROPERTY_VALUE_MAX];

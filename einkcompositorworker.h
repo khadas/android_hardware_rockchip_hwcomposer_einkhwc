@@ -117,6 +117,7 @@ struct ebc_buf_info_t {
 	int win_y2;
 	int width_mm;
 	int height_mm;
+	int needpic; //16 or 32
 };
 
 struct win_coordinate{
@@ -166,7 +167,8 @@ class EinkCompositorWorker : public Worker {
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int ConvertToColorEink1(const buffer_handle_t &fb_handle);
   int ConvertToColorEink2(const buffer_handle_t &fb_handle);
-  int ConvertToY4Regal(const buffer_handle_t &fb_handle);
+  int InToOrOutY8Regal(const buffer_handle_t &fb_handle);
+  int ConvertToY8Regal(const buffer_handle_t &fb_handle);
   int ConvertToY4Dither(const buffer_handle_t &fb_handle, int epd_mode);
   int ConvertToY1Dither(const buffer_handle_t &fb_handle);
   int ColorCommit(int epd_mode);
@@ -212,6 +214,7 @@ class EinkCompositorWorker : public Worker {
   int rgaBuffer_index = 0;
   DrmRgaBuffer rgaBuffers[MaxRgaBuffers];
   int *gray16_buffer = NULL;
+  int *gray256_old_buffer = NULL;
   int *gray256_new_buffer = NULL;
   char* rga_output_addr = NULL;
   bool rgba_to_y4_by_rga = false;

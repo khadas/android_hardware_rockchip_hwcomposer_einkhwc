@@ -58,7 +58,7 @@ namespace android {
 
 static const int kMaxQueueDepth = 1;
 static const int kAcquireWaitTimeoutMs = 3000;
-
+static int last_regal = 0;
 EinkCompositorWorker::EinkCompositorWorker()
     : Worker("Eink-compositor", HAL_PRIORITY_URGENT_DISPLAY),
       timeline_fd_(-1),
@@ -99,6 +99,9 @@ EinkCompositorWorker::~EinkCompositorWorker() {
   }
   if (gray256_new_buffer != NULL)
     free(gray256_new_buffer);
+
+  if (gray256_old_buffer != NULL)
+    free(gray256_old_buffer);
 }
 
 const char *pvi_wf_get_version(const char *waveform)
@@ -155,6 +158,9 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
   gray16_buffer = (int*)(vaddr_real + commit_buf_info.offset);
 
   gray256_new_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
+  gray256_old_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
+  memset(gray256_old_buffer, 0xff, ebc_buf_info.width * ebc_buf_info.height);
+  memset(gray256_new_buffer, 0xff, ebc_buf_info.width * ebc_buf_info.height);
 
   //init waveform for eink regal mode
   waveform_fd = open("/dev/waveform", O_RDWR,0);
@@ -169,6 +175,7 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
       waveform_fd = -1;
       goto OUT;
   }
+
   ALOGD("waveform version: %s\n", pvi_wf_get_version((char *)waveform_base));
   ret = EInk_Init((char *)waveform_base);
   if (ret) {
@@ -738,6 +745,7 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
   commit_buf_info.win_y1 = rect.top;
   commit_buf_info.win_y2 = rect.bottom;
   commit_buf_info.epd_mode = mode;
+  commit_buf_info.needpic = 16;
 
   ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",
             __FUNCTION__,__LINE__,mode,commit_buf_info.win_x1,commit_buf_info.win_x2,
@@ -771,6 +779,7 @@ int EinkCompositorWorker::PostEinkY8(int *buffer, Rect rect, int mode){
   commit_buf_info.win_y1 = rect.top;
   commit_buf_info.win_y2 = rect.bottom;
   commit_buf_info.epd_mode = mode;
+  commit_buf_info.needpic = 32;
 
   ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",
             __FUNCTION__,__LINE__,mode,commit_buf_info.win_x1,commit_buf_info.win_x2,
@@ -791,7 +800,6 @@ int EinkCompositorWorker::PostEinkY8(int *buffer, Rect rect, int mode){
 
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
   gray16_buffer = (int*)(vaddr_real + commit_buf_info.offset);
-
 
   return 0;
 }
@@ -925,13 +933,27 @@ int EinkCompositorWorker::ConvertToColorEink1(const buffer_handle_t &fb_handle){
   return 0;
 }
 
-int EinkCompositorWorker::ConvertToY4Regal(const buffer_handle_t &fb_handle) {
+static void do_gray256_buffer(uint32_t *buffer_in, uint32_t *buffer_out, int width, int height)
+{
+	uint32_t src_data;
+	uint32_t *src = buffer_in;
+	uint32_t *dst = buffer_out;
+
+	for(int i = 0; i < height; i++) {
+		for(int j = 0; j< width/4; j++) {
+			src_data = *src++;
+			src_data &= 0xf0f0f0f0;
+			*dst++ = src_data;
+		}
+	}
+}
+
+int EinkCompositorWorker::InToOrOutY8Regal(const buffer_handle_t &fb_handle) {
 
   DumpLayer("rgba", fb_handle);
 
   ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
 
-  char *gray256_addr = NULL;
   int framebuffer_wdith, framebuffer_height, output_format, ret;
   framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
   framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
@@ -966,10 +988,59 @@ int EinkCompositorWorker::ConvertToY4Regal(const buffer_handle_t &fb_handle) {
     ALOGE("Failed to lock rga buffer, rga_output_addr =%p, ret=%d", rga_output_addr, ret);
     return ret;
   }
+  do_gray256_buffer((uint32_t *)rga_output_addr, (uint32_t *)gray16_buffer, ebc_buf_info.width, ebc_buf_info.height);
+  memcpy(gray256_old_buffer, gray16_buffer, ebc_buf_info.width * ebc_buf_info.height);
 
-  eink_process((uint8_t *)rga_output_addr, (uint8_t *)gray256_new_buffer, ebc_buf_info.width, ebc_buf_info.height);
-  memcpy(gray256_new_buffer, rga_output_addr, ebc_buf_info.width * ebc_buf_info.height);
-  gray256_to_gray16_dither((char *)rga_output_addr, gray16_buffer, height, width, ebc_buf_info.width);
+  if(rga_output_addr != NULL){
+    hwc_unlock(src_hnd);
+    rga_output_addr = NULL;
+  }
+  return 0;
+}
+
+int EinkCompositorWorker::ConvertToY8Regal(const buffer_handle_t &fb_handle) {
+
+  DumpLayer("rgba", fb_handle);
+
+  ALOGD_IF(log_level(DBG_DEBUG), "%s", __FUNCTION__);
+
+  int framebuffer_wdith, framebuffer_height, output_format, ret;
+  framebuffer_wdith = ebc_buf_info.width - (ebc_buf_info.width % 8);
+  framebuffer_height = ebc_buf_info.height - (ebc_buf_info.height % 2);
+  output_format = HAL_PIXEL_FORMAT_YCrCb_NV12;
+
+  DrmRgaBuffer &rga_buffer = rgaBuffers[0];
+  if (!rga_buffer.Allocate(framebuffer_wdith, framebuffer_height, output_format)) {
+    ALOGE("Failed to allocate rga buffer with size %dx%d", framebuffer_wdith, framebuffer_height);
+    return -ENOMEM;
+  }
+
+  int width,height,stride,byte_stride,format,size;
+  buffer_handle_t src_hnd = rga_buffer.buffer()->handle;
+
+  width = hwc_get_handle_attibute(src_hnd,ATT_WIDTH);
+  height = hwc_get_handle_attibute(src_hnd,ATT_HEIGHT);
+  stride = hwc_get_handle_attibute(src_hnd,ATT_STRIDE);
+  byte_stride = hwc_get_handle_attibute(src_hnd,ATT_BYTE_STRIDE);
+  format = hwc_get_handle_attibute(src_hnd,ATT_FORMAT);
+  size = hwc_get_handle_attibute(src_hnd,ATT_SIZE);
+
+  ret = Rgba888ToGray256ByRga(rga_buffer, fb_handle);
+  if (ret) {
+    ALOGE("Failed to prepare rga buffer for RGA rotate %d", ret);
+    return ret;
+  }
+
+  rga_output_addr = NULL;
+  ret = hwc_lock(src_hnd, GRALLOC_USAGE_SW_READ_MASK | GRALLOC_USAGE_SW_WRITE_MASK, //gr_handle->usage,
+                0, 0, width, height, (void **)&rga_output_addr);
+  if(ret || rga_output_addr == NULL){
+    ALOGE("Failed to lock rga buffer, rga_output_addr =%p, ret=%d", rga_output_addr, ret);
+    return ret;
+  }
+  do_gray256_buffer((uint32_t *)rga_output_addr, (uint32_t *)gray16_buffer, ebc_buf_info.width, ebc_buf_info.height);
+  eink_process((uint8_t *)gray16_buffer, (uint8_t *)gray256_old_buffer, ebc_buf_info.width, ebc_buf_info.height);
+  memcpy(gray256_old_buffer, gray16_buffer, ebc_buf_info.width * ebc_buf_info.height);
 
   if(rga_output_addr != NULL){
     hwc_unlock(src_hnd);
@@ -1098,6 +1169,7 @@ int EinkCompositorWorker::ConvertToY1Dither(const buffer_handle_t &fb_handle) {
   }
   return 0;
 }
+
 int EinkCompositorWorker::ColorCommit(int epd_mode) {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
   int *gray16_buffer_bak = gray16_buffer;
@@ -1105,14 +1177,15 @@ int EinkCompositorWorker::ColorCommit(int epd_mode) {
   gLastEpdMode = epd_mode;
   return 0;
 }
+
 int EinkCompositorWorker::EinkCommit(int epd_mode) {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
-  int *gray256_new_buffer_bak = gray256_new_buffer;
+  int *gray256_new_buffer_bak = gray16_buffer;
   PostEinkY8(gray256_new_buffer_bak, screen_rect, epd_mode);
   gLastEpdMode = epd_mode;
   return 0;
 }
-
+ 
 int EinkCompositorWorker::Y4Commit(int epd_mode) {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
   int *gray16_buffer_bak = gray16_buffer;
@@ -1129,7 +1202,6 @@ int EinkCompositorWorker::A2Commit(int epd_mode) {
       epd_tmp_mode = EPD_A2_ENTER;
   else
       epd_tmp_mode = epd_mode;
-
   PostEink(gray16_buffer_bak, screen_rect, epd_tmp_mode);
   gLastEpdMode = epd_mode;
   return 0;
@@ -1183,6 +1255,18 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
     return -1;
   }
 
+  if (last_regal) {
+  	if (composition->einkMode != EPD_FULL_GLD16
+		&& composition->einkMode != EPD_FULL_GLR16
+		&& composition->einkMode != EPD_PART_GLD16
+		&& composition->einkMode != EPD_PART_GLR16) {
+  		last_regal = !last_regal;
+		InToOrOutY8Regal(composition->fb_handle);
+      		EinkCommit(EPD_FORCE_FULL);
+		return 0;
+  	}
+  }
+
   switch(composition->einkMode){
     case EPD_A2_DITHER:
       ConvertToY1Dither(composition->fb_handle);
@@ -1197,9 +1281,17 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
       break;
     case EPD_FULL_GLD16:
     case EPD_FULL_GLR16:
+    case EPD_PART_GLD16:
+    case EPD_PART_GLR16:
       if (waveform_fd > 0) {
-          ConvertToY4Regal(composition->fb_handle);
-          Y4Commit(composition->einkMode);
+	   if (last_regal) {
+          	ConvertToY8Regal(composition->fb_handle);
+          	EinkCommit(composition->einkMode);
+	   } else {
+	       last_regal = !last_regal;
+		InToOrOutY8Regal(composition->fb_handle);
+          	EinkCommit(EPD_FORCE_FULL);
+	   }
           break;
       }
       FALLTHROUGH_INTENDED;

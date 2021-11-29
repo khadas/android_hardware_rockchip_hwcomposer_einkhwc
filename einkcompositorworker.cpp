@@ -1261,12 +1261,6 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
 		&& composition->einkMode != EPD_PART_GLD16
 		&& composition->einkMode != EPD_PART_GLR16) {
   		last_regal = !last_regal;
-	      ConvertToY4Dither(composition->fb_handle, composition->einkMode);
-		if (composition->einkMode == EPD_RESUME)
-		      	Y4Commit(EPD_RESUME);
-		else
-		      	Y4Commit(EPD_FORCE_FULL);
-		return 0;
   	}
   }
 

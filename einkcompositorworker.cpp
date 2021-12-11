@@ -147,6 +147,8 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
       return -1;
   }
 
+  snprintf(commit_buf_info.tid_name, 16, "hwc_compose");
+
   if(ioctl(ebc_fd, EBC_GET_BUFFER,&commit_buf_info)!=0)
   {
      ALOGE("EBC_GET_BUFFER failed\n");

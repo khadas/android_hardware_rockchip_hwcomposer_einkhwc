@@ -160,6 +160,7 @@ struct ebc_buf_info {
     int width_mm;
     int height_mm;
     int needpic; //16 or 32
+    char tid_name[16];
 };
 
 struct win_coordinate{
@@ -2069,6 +2070,7 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
 
   struct ebc_buf_info_t buf_info;
 
+  snprintf(buf_info.tid_name, 16, "hwc_logo");
   if(ioctl(ebc_fd, EBC_GET_BUFFER,&buf_info)!=0)
   {
      ALOGE("EBC_GET_BUFFER failed\n");

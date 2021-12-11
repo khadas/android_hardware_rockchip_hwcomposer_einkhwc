@@ -118,6 +118,7 @@ struct ebc_buf_info_t {
 	int width_mm;
 	int height_mm;
 	int needpic; //16 or 32
+	char tid_name[16];
 };
 
 struct win_coordinate{

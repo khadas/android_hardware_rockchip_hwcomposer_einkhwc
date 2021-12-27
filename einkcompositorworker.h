@@ -226,6 +226,8 @@ class EinkCompositorWorker : public Worker {
   int *gray256_new_buffer = NULL;
   char* rga_output_addr = NULL;
   bool rgba_to_y4_by_rga = false;
+  buffer_handle_t last_fb_handle = NULL;
+  int last_fb_handle_mode = EPD_PART_GC16;
 };
 }
 

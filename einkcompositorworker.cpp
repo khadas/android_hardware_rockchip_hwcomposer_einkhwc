@@ -231,40 +231,55 @@ void EinkCompositorWorker::QueueComposite(hwc_display_contents_1_t *dc,int Curre
 
   for (size_t i = 0; i < dc->numHwLayers; ++i) {
     hwc_layer_1_t *layer = &dc->hwLayers[i];
-  if (layer != NULL && layer->handle != NULL && layer->compositionType == HWC_FRAMEBUFFER_TARGET){
-    composition->layer_acquire_fences.emplace_back(layer->acquireFenceFd);
-    layer->acquireFenceFd = -1;
-    if (layer->releaseFenceFd >= 0)
-      close(layer->releaseFenceFd);
-    layer->releaseFenceFd = CreateNextTimelineFence();
-    composition->fb_handle = layer->handle;
-    composition->einkMode = CurrentEpdMode;
+    if (layer != NULL && layer->handle != NULL && layer->compositionType == HWC_FRAMEBUFFER_TARGET){
+      // 送显图层必须与上一帧有差别，才可以往屏端更新
+      if(layer->handle != last_fb_handle){
+        composition->layer_acquire_fences.emplace_back(layer->acquireFenceFd);
+        layer->acquireFenceFd = -1;
+        if (layer->releaseFenceFd >= 0)
+          close(layer->releaseFenceFd);
+        layer->releaseFenceFd = CreateNextTimelineFence();
+        composition->fb_handle = layer->handle;
+        last_fb_handle = layer->handle;
 
-    composition->release_timeline = timeline_;
+        if(last_fb_handle_mode == EPD_RESUME){
+          composition->einkMode = EPD_RESUME;
+          last_fb_handle_mode = EPD_NULL;
+          ALOGI("rk-debug force set EPD_RESUME");
+        }else{
+          composition->einkMode = CurrentEpdMode;
+        }
 
-    Lock();
-    int ret = pthread_mutex_lock(&eink_lock_);
-    if (ret) {
-      ALOGE("Failed to acquire compositor lock %d", ret);
-    }
+        composition->release_timeline = timeline_;
 
-    while (composite_queue_.size() >= kMaxQueueDepth) {
-      Unlock();
-      pthread_cond_wait(&eink_queue_cond_,&eink_lock_);
-      Lock();
-    }
+        Lock();
+        int ret = pthread_mutex_lock(&eink_lock_);
+        if (ret) {
+          ALOGE("Failed to acquire compositor lock %d", ret);
+        }
 
-    composite_queue_.push(std::move(composition));
+        while (composite_queue_.size() >= kMaxQueueDepth) {
+          Unlock();
+          pthread_cond_wait(&eink_queue_cond_,&eink_lock_);
+          Lock();
+        }
 
-    ret = pthread_mutex_unlock(&eink_lock_);
-    if (ret)
-      ALOGE("Failed to release compositor lock %d", ret);
+        composite_queue_.push(std::move(composition));
 
-    SignalLocked();
-    Unlock();
+        ret = pthread_mutex_unlock(&eink_lock_);
+        if (ret)
+          ALOGE("Failed to release compositor lock %d", ret);
+
+        SignalLocked();
+        Unlock();
+      }else{
+        ALOGI("rk-debug fb-handle is same");
+        if(CurrentEpdMode == EPD_RESUME){
+          last_fb_handle_mode = EPD_RESUME;
+        }
+      }
     }
   }
-
 }
 
 void EinkCompositorWorker::Routine() {
@@ -1216,7 +1231,7 @@ int EinkCompositorWorker::EinkCommit(int epd_mode) {
   gLastEpdMode = epd_mode;
   return 0;
 }
- 
+
 int EinkCompositorWorker::Y4Commit(int epd_mode) {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
   int *gray16_buffer_bak = gray16_buffer;

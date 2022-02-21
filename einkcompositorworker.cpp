@@ -104,17 +104,37 @@ EinkCompositorWorker::~EinkCompositorWorker() {
     free(gray256_old_buffer);
 }
 
-const char *pvi_wf_get_version(const char *waveform)
+static int pvi_check_wf(const char *waveform)
 {
-	static char spi_id_buffer[32];
-	int i;
+	unsigned char mode_version;
+	int ret = -1;
 
-	for (i = 0; i < 31; i++)
-		spi_id_buffer[i] = waveform[i + 0x41];
+	if (!waveform)
+		return -1;
 
-	spi_id_buffer[31] = '\0';
+	mode_version = waveform[16];
 
-	return (const char *)spi_id_buffer;
+	switch (mode_version) {
+	case 0x43:
+	case 0x16:
+	case 0x18:
+	case 0x19:
+	case 0x20:
+	case 0x48:
+		ret = 0;
+		break;
+	case 0x09:
+	case 0x12:
+	case 0x23:
+	case 0x54:
+		ret = -1;
+		break;
+	default:
+		ret = -1;
+		break;
+	}
+
+	return ret;
 }
 
 int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
@@ -178,7 +198,11 @@ int EinkCompositorWorker::Init(struct hwc_context_t *ctx) {
       goto OUT;
   }
 
-  ALOGD("waveform version: %s\n", pvi_wf_get_version((char *)waveform_base));
+  ret = pvi_check_wf((char *)waveform_base);
+  if (ret) {
+      ALOGE("pvi check wf failed\n");
+      goto OUT;
+  }
   ret = EInk_Init((char *)waveform_base);
   if (ret) {
       ALOGE("EInk_Init error, ret = %d\n", ret);

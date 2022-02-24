@@ -833,6 +833,8 @@ int EinkCompositorWorker::PostEinkY8(int *buffer, Rect rect, int mode){
 
 static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
+static int prev_diff_percent = 0;
+static int cur_diff_percent = 0;
 
 int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
 
@@ -1248,6 +1250,22 @@ int EinkCompositorWorker::update_fullmode_num(){
   return 0;
 }
 
+int EinkCompositorWorker::update_diff_percent_num(){
+  char value[PROPERTY_VALUE_MAX];
+  property_get("sys.diff.percent",value,"0");
+
+  cur_diff_percent = atoi(value);
+  if (prev_diff_percent != cur_diff_percent) {
+    if(ioctl(ebc_fd, EBC_SET_DIFF_PERCENT, &cur_diff_percent) != 0) {
+        ALOGE("EBC_SET_DIFF_PERCENT failed\n");
+        return -1;
+    }
+    prev_diff_percent = cur_diff_percent;
+  }
+  return 0;
+}
+
+
 int EinkCompositorWorker::SetColorEinkMode(EinkComposition *composition) {
   ATRACE_CALL();
 
@@ -1269,6 +1287,7 @@ int EinkCompositorWorker::SetColorEinkMode(EinkComposition *composition) {
       break;
   }
   update_fullmode_num();
+  update_diff_percent_num();
 
   return 0;
 }
@@ -1324,6 +1343,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
       break;
   }
   update_fullmode_num();
+  update_diff_percent_num();
 
   return 0;
 }

@@ -138,6 +138,8 @@ struct win_coordinate{
 #define EBC_SET_FULL_MODE_NUM	(0x7003)
 #define EBC_ENABLE_OVERLAY		(0x7004)
 #define EBC_DISABLE_OVERLAY		(0x7005)
+#define EBC_GET_DSP_BUF_NUM	(0x700c)
+#define EBC_SET_DIFF_PERCENT	(0x700d)
 
 class EinkCompositorWorker : public Worker {
  public:
@@ -177,6 +179,7 @@ class EinkCompositorWorker : public Worker {
   int Y4Commit(int epd_mode);
   int A2Commit(int epd_mode);
   int update_fullmode_num();
+  int update_diff_percent_num();
   int DumpEinkSurface(int *buffer);
   int PostEink(int *buffer, Rect rect, int mode);
   int PostEinkY8(int *buffer, Rect rect, int mode);

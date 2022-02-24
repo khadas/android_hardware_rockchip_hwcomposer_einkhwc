@@ -181,7 +181,8 @@ struct win_coordinate{
 #define EBC_SET_FULL_MODE_NUM    (0x7003)
 #define EBC_ENABLE_OVERLAY        (0x7004)
 #define EBC_DISABLE_OVERLAY        (0x7005)
-
+#define EBC_GET_DSP_BUF_NUM	(0x700c)
+#define EBC_SET_DIFF_PERCENT	(0x700d)
 #endif
 
 #define POWEROFF_IMAGE_PATH_USER "/data/misc/poweroff.png"

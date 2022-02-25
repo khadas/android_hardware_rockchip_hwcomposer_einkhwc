@@ -1304,7 +1304,8 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
   	if (composition->einkMode != EPD_FULL_GLD16
 		&& composition->einkMode != EPD_FULL_GLR16
 		&& composition->einkMode != EPD_PART_GLD16
-		&& composition->einkMode != EPD_PART_GLR16) {
+		&& composition->einkMode != EPD_PART_GLR16
+		&& composition->einkMode != EPD_FORCE_FULL) {
   		last_regal = !last_regal;
   	}
   }

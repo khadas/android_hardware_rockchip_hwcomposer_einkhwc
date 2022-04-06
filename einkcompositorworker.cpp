@@ -771,7 +771,9 @@ int EinkCompositorWorker::PostEink(int *buffer, Rect rect, int mode){
   commit_buf_info.win_y1 = rect.top;
   commit_buf_info.win_y2 = rect.bottom;
   commit_buf_info.epd_mode = mode;
-  commit_buf_info.needpic = 16;
+  commit_buf_info.needpic = 0;
+  if (mode == EPD_RESUME || mode == EPD_FORCE_FULL || mode == EPD_A2_ENTER)
+    commit_buf_info.needpic = 1;
 
   ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",
             __FUNCTION__,__LINE__,mode,commit_buf_info.win_x1,commit_buf_info.win_x2,
@@ -805,7 +807,7 @@ int EinkCompositorWorker::PostEinkY8(int *buffer, Rect rect, int mode){
   commit_buf_info.win_y1 = rect.top;
   commit_buf_info.win_y2 = rect.bottom;
   commit_buf_info.epd_mode = mode;
-  commit_buf_info.needpic = 32;
+  commit_buf_info.needpic = 0;
 
   ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",
             __FUNCTION__,__LINE__,mode,commit_buf_info.win_x1,commit_buf_info.win_x2,
@@ -835,6 +837,7 @@ static int not_fullmode_num = 500;
 static int curr_not_fullmode_num = -1;
 static int prev_diff_percent = 0;
 static int cur_diff_percent = 0;
+static int wait_new_buf_time = 0;
 
 int EinkCompositorWorker::ConvertToColorEink2(const buffer_handle_t &fb_handle){
 
@@ -1227,7 +1230,7 @@ int EinkCompositorWorker::A2Commit(int epd_mode) {
   Rect screen_rect = Rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
   int *gray16_buffer_bak = gray16_buffer;
   if((gLastEpdMode != EPD_A2) && (gLastEpdMode != EPD_A2_DITHER))
-      epd_tmp_mode = EPD_A2_ENTER;
+      epd_tmp_mode = EPD_FORCE_FULL;
   else
       epd_tmp_mode = epd_mode;
   PostEink(gray16_buffer_bak, screen_rect, epd_tmp_mode);
@@ -1265,6 +1268,20 @@ int EinkCompositorWorker::update_diff_percent_num(){
   return 0;
 }
 
+int EinkCompositorWorker::update_waiting_time(){
+  char value[PROPERTY_VALUE_MAX];
+  property_get("sys.eink.waiting.time",value, "0");
+  int time_value = atoi(value);
+
+  if (wait_new_buf_time != time_value) {
+    if(ioctl(ebc_fd, EBC_WAIT_NEW_BUF_TIME, &time_value) != 0) {
+        ALOGE("EBC_WAIT_NEW_BUF_TIME failed\n");
+        return -1;
+    }
+    wait_new_buf_time = time_value;
+  }
+  return 0;
+}
 
 int EinkCompositorWorker::SetColorEinkMode(EinkComposition *composition) {
   ATRACE_CALL();
@@ -1288,7 +1305,7 @@ int EinkCompositorWorker::SetColorEinkMode(EinkComposition *composition) {
   }
   update_fullmode_num();
   update_diff_percent_num();
-
+  update_waiting_time();
   return 0;
 }
 
@@ -1326,6 +1343,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
     case EPD_FULL_GLR16:
     case EPD_PART_GLD16:
     case EPD_PART_GLR16:
+    #if 0 // new ebc no support regal mode now, will support later versions
       if (waveform_fd > 0) {
 	   if (last_regal) {
           	ConvertToY8Regal(composition->fb_handle);
@@ -1338,6 +1356,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
           break;
       }
       FALLTHROUGH_INTENDED;
+    #endif
     default:
       ConvertToY4Dither(composition->fb_handle, composition->einkMode);
       Y4Commit(composition->einkMode);
@@ -1345,7 +1364,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
   }
   update_fullmode_num();
   update_diff_percent_num();
-
+  update_waiting_time();
   return 0;
 }
 

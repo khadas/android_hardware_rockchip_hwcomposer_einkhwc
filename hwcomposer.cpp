@@ -2332,10 +2332,10 @@ static int hwc_adajust_sf_vsync(int mode){
       break;
     case EPD_RESUME:
       resume_count = 5;
-      strcpy(refresh_skip_count, "29");
+      strcpy(refresh_skip_count, "5");
       break;
     case EPD_SUSPEND:
-      strcpy(refresh_skip_count, "29");
+      strcpy(refresh_skip_count, "5");
       break;
     default:
       strcpy(refresh_skip_count, "2");

@@ -112,6 +112,12 @@ namespace android {
 #define EINK_FB_SIZE        0x400000 /* 4M */
 
 /*
+* ebc buf format
+*/
+#define EBC_Y4 (0)
+#define EBC_Y8 (1)
+
+/*
  * IMPORTANT: Those values is corresponding to android hardware program,
  * so *FORBID* to changes bellow values, unless you know what you're doing.
  * And if you want to add new refresh modes, please appended to the tail.
@@ -159,7 +165,7 @@ struct ebc_buf_info {
     int win_y2;
     int width_mm;
     int height_mm;
-    int needpic; // 1: buf can not be drop by ebc, 0: buf can drop by ebc
+    int needpic; // 1: buf can not be drop by ebc, 0: buf can drop by ebc 2: regal buf, can not be drop by ebc
     char tid_name[16];
 };
 
@@ -175,17 +181,24 @@ struct win_coordinate{
 /*
  * ebc system ioctl command
  */
-#define EBC_GET_BUFFER            (0x7000)
-#define EBC_SEND_BUFFER            (0x7001)
-#define EBC_GET_BUFFER_INFO        (0x7002)
-#define EBC_SET_FULL_MODE_NUM    (0x7003)
-#define EBC_ENABLE_OVERLAY        (0x7004)
-#define EBC_DISABLE_OVERLAY        (0x7005)
-#define EBC_GET_OSD_BUFFER	(0x7006)
-#define EBC_SEND_OSD_BUFFER	(0x7007)
-#define EBC_NEW_BUF_PREPARE	(0x7008)
-#define EBC_SET_DIFF_PERCENT	(0x7009)
-#define EBC_WAIT_NEW_BUF_TIME (0x700a)
+#define EBC_GET_BUFFER				(0x7000)
+#define EBC_SEND_BUFFER			(0x7001)
+#define EBC_GET_BUFFER_INFO		(0x7002)
+#define EBC_SET_FULL_MODE_NUM	(0x7003)
+#define EBC_ENABLE_OVERLAY		(0x7004)
+#define EBC_DISABLE_OVERLAY		(0x7005)
+#define EBC_GET_OSD_BUFFER		(0x7006)
+#define EBC_SEND_OSD_BUFFER		(0x7007)
+#define EBC_NEW_BUF_PREPARE		(0x7008)
+#define EBC_SET_DIFF_PERCENT		(0x7009)
+#define EBC_WAIT_NEW_BUF_TIME	(0x700a)
+#define EBC_GET_OVERLAY_STATUS	(0x700b)
+#define EBC_ENABLE_BG_CONTROL	(0x700c)
+#define EBC_DISABLE_BG_CONTROL	(0x700d)
+#define EBC_ENABLE_RESUME_COUNT	(0x700e)
+#define EBC_DISABLE_RESUME_COUNT	(0x700f)
+#define EBC_GET_BUF_FORMAT		(0x7010)
+#define EBC_DROP_PREV_BUFFER		(0x7011)
 #endif
 
 #define POWEROFF_IMAGE_PATH_USER "/data/misc/poweroff.png"
@@ -206,7 +219,7 @@ int gPixel_format = 24;
 int ebc_fd = -1;
 void *ebc_buffer_base = NULL;
 struct ebc_buf_info_t ebc_buf_info;
-
+int ebc_buf_format = EBC_Y4;
 static int gLastEpdMode = EPD_PART_GC16;
 static int gCurrentEpdMode = EPD_PART_GC16;
 static int gOneFullModeTime = 0;
@@ -605,6 +618,197 @@ void Luma8bit_to_4bit_row_16(int  *src,  int *dst, short int *res0,  short int*r
 
 }
 
+void Luma8bit_to_8bit_row_16(int  *src,  int *dst, short int *res0,  short int*res1, int w)
+{
+    int i;
+    int g0, g1, g2,g3,g4,g5,g6,g7,g_temp;
+    int e;
+    int v0, v1, v2, v3;
+    int src_data;
+    int src_temp_data;
+    v0 = 0;
+    for(i=0; i<w; i+=8)
+    {
+
+        src_data =  *src++;
+        src_temp_data = src_data&0xff;
+        g_temp = src_temp_data + res0[i] + v0;
+        res0[i] = 0;
+        g_temp = CLIP(g_temp);
+        g0 = g_temp & 0xf0;
+        e = g_temp - g0;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+
+        if( i==0 )
+        {
+            res1[i] += v2;
+            res1[i+1] += v3;
+        }
+        else
+        {
+            res1[i-1] += v1;
+            res1[i]   += v2;
+            res1[i+1] += v3;
+        }
+
+
+
+        src_temp_data = ((src_data&0x0000ff00)>>8);
+        g_temp = src_temp_data + res0[i+1] + v0;
+        res0[i+1] = 0;
+        g_temp = CLIP(g_temp);
+        g1 = g_temp & 0xf0;
+        e = g_temp - g1;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i]     += v1;
+        res1[i+1]   += v2;
+        res1[i+2]   += v3;
+
+
+
+
+        src_temp_data = ((src_data&0x00ff0000)>>16);
+        g_temp = src_temp_data + res0[i+2] + v0;
+        res0[i+2] = 0;
+        g_temp = CLIP(g_temp);
+        g2 = g_temp & 0xf0;
+        e = g_temp - g2;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+1]     += v1;
+        res1[i+2]   += v2;
+        res1[i+3]   += v3;
+
+
+        src_temp_data = ((src_data&0xff000000)>>24);
+        g_temp = src_temp_data + res0[i+3] + v0;
+        res0[i+3] = 0;
+        g_temp = CLIP(g_temp);
+        g3 = g_temp & 0xf0;
+        e = g_temp - g3;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+2]     += v1;
+        res1[i+3]   += v2;
+        res1[i+4]   += v3;
+
+       *dst++ = (g3<<24)|(g2<<16)|(g1<<8)|g0;
+
+        src_data =  *src++;
+        src_temp_data = src_data&0xff;
+        g_temp = src_temp_data + res0[i+4] + v0;
+        res0[i+4] = 0;
+        g_temp = CLIP(g_temp);
+        g4 = g_temp & 0xf0;
+        e = g_temp - g4;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+
+        {
+            res1[i+3] += v1;
+            res1[i+4]   += v2;
+            res1[i+5] += v3;
+        }
+
+
+
+        src_temp_data = ((src_data&0x0000ff00)>>8);
+        g_temp = src_temp_data + res0[i+5] + v0;
+        res0[i+5] = 0;
+        g_temp = CLIP(g_temp);
+        g5 = g_temp & 0xf0;
+        e = g_temp - g5;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+4]     += v1;
+        res1[i+5]   += v2;
+        res1[i+6]   += v3;
+
+
+
+
+        src_temp_data = ((src_data&0x00ff0000)>>16);
+        g_temp = src_temp_data + res0[i+6] + v0;
+        res0[i+6] = 0;
+        g_temp = CLIP(g_temp);
+        g6 = g_temp & 0xf0;
+        e = g_temp - g6;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        res1[i+5]     += v1;
+        res1[i+6]   += v2;
+        res1[i+7]   += v3;
+
+
+
+
+        src_temp_data = ((src_data&0xff000000)>>24);
+        g_temp = src_temp_data + res0[i+7] + v0;
+        res0[i+7] = 0;
+        g_temp = CLIP(g_temp);
+        g7 = g_temp & 0xf0;
+        e = g_temp - g7;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        if (i == w-8)
+        {
+            res1[i+6] += v1;
+            res1[i+7] += v2;
+        }
+        else
+        {
+            res1[i+6]     += v1;
+            res1[i+7]   += v2;
+            res1[i+8]   += v3;
+        }
+
+        *dst++ =(g7<<24)|(g6<<16)|(g5<<8)|g4;
+    }
+
+}
+
+int gray256_to_gray16_dither_y8(char *gray256_addr,char *gray16_buffer,int  panel_h, int panel_w,int vir_width){
+
+  ATRACE_CALL();
+
+  UN_USED(vir_width);
+  int h;
+  int w;
+  short int *line_buffer[2];
+  char *src_buffer;
+  line_buffer[0] =(short int *) malloc(panel_w*2);
+  line_buffer[1] =(short int *) malloc(panel_w*2);
+  memset(line_buffer[0],0,panel_w*2);
+  memset(line_buffer[1],0,panel_w*2);
+
+  for(h = 0;h<panel_h;h++){
+      Luma8bit_to_8bit_row_16((int*)gray256_addr,(int *)gray16_buffer,line_buffer[h&1],line_buffer[!(h&1)],panel_w);
+      gray16_buffer = (char *)(gray16_buffer+panel_w);
+      gray256_addr = (char *)(gray256_addr+panel_w);
+  }
+  free(line_buffer[0]);
+  free(line_buffer[1]);
+
+  return 0;
+}
 
 int gray256_to_gray16_dither(char *gray256_addr,int *gray16_buffer,int  panel_h, int panel_w,int vir_width){
 
@@ -779,6 +983,75 @@ void Luma8bit_to_4bit_row_2(short int  *src,  char *dst, short int *res0,  short
 
 }
 
+void Luma8bit_to_8bit_row_2(short int  *src,  short int *dst, short int *res0,  short int*res1, int w,int threshold)
+{
+    int i;
+    int g0, g1, g2,g3,g4,g5,g6,g7,g_temp;
+    int e;
+    int v0, v1, v2, v3;
+    int src_data;
+    int src_temp_data;
+    v0 = 0;
+    for(i=0; i<w; i+=2)
+    {
+
+        src_data =  *src++;
+        src_temp_data = src_data&0xff;
+        g_temp = src_temp_data + res0[i] + v0;
+        res0[i] = 0;
+        g_temp = CLIP(g_temp);
+        if(g_temp >= threshold)
+            g0 = 0xf0;
+        else
+            g0 = 0x00;
+        e = g_temp - g0;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        if(g_temp >= threshold)
+            g0 = 0xf0;
+        else
+            g0 = 0x00;
+        if( i==0 )
+        {
+            res1[i] += v2;
+            res1[i+1] += v3;
+        }
+        else
+        {
+            res1[i-1] += v1;
+            res1[i]   += v2;
+            res1[i+1] += v3;
+        }
+
+        src_temp_data = ((src_data&0x0000ff00)>>8);
+        g_temp = src_temp_data + res0[i+1] + v0;
+        res0[i+1] = 0;
+        g_temp = CLIP(g_temp);
+        if(g_temp >= threshold)
+            g1 = 0xf0;
+        else
+            g1 = 0x00;
+        e = g_temp - g1;
+        v0 = (e * 7) >> 4;
+        v1 = (e * 3) >> 4;
+        v2 = (e * 5) >> 4;
+        v3 = (e * 1) >> 4;
+        if(g_temp >= threshold)
+            g1 = 0xf000;
+        else
+            g1 = 0x00;
+        res1[i]     += v1;
+        res1[i+1]   += v2;
+        res1[i+2]   += v3;
+
+        *dst++ =g1|g0;
+    }
+
+}
+
+
 void Luma8bit_to_4bit(unsigned int *graynew,unsigned int *gray8bit,int  vir_height, int vir_width,int panel_w)
 {
     ATRACE_CALL();
@@ -885,6 +1158,47 @@ int gray256_to_gray2_dither(char *gray256_addr,char *gray2_buffer,int  panel_h, 
         for (int h = rects[i].top;h <= rects[i].bottom && h < panel_h;h++) {
             //ALOGD("DEBUG_lb Luma8bit_to_4bit_row_2, w:%d, offset:%d, offset_dst:%d", w, offset, offset_dst);
             Luma8bit_to_4bit_row_2((short int*)(gray256_addr + offset), (char *)(gray2_buffer + (offset_dst >> 1)),
+                    line_buffer[h&1], line_buffer[!(h&1)], w, 0x80);
+            offset += panel_w;
+            offset_dst += vir_width;
+        }
+    }
+
+    free(line_buffer[0]);
+    free(line_buffer[1]);
+  return 0;
+}
+
+int gray256_to_gray2_dither_y8(char *gray256_addr,char *gray2_buffer,int  panel_h, int panel_w,int vir_width,Region region){
+
+    ATRACE_CALL();
+
+    //do dither
+    short int *line_buffer[2];
+    line_buffer[0] =(short int *) malloc(panel_w << 1);
+    line_buffer[1] =(short int *) malloc(panel_w << 1);
+
+    size_t count = 0;
+    const Rect* rects = region.getArray(&count);
+    for (size_t i = 0;i < (int)count;i++) {
+        memset(line_buffer[0], 0, panel_w << 1);
+        memset(line_buffer[1], 0, panel_w << 1);
+
+        int w = rects[i].right - rects[i].left;
+        int offset = rects[i].top * panel_w + rects[i].left;
+        int offset_dst = rects[i].top * vir_width + rects[i].left;
+        if (offset_dst % 2) {
+            offset_dst += (2 - offset_dst % 2);
+        }
+        if (offset % 2) {
+            offset += (2 - offset % 2);
+        }
+        if ((offset_dst + w) % 2) {
+            w -= (offset_dst + w) % 2;
+        }
+        for (int h = rects[i].top;h <= rects[i].bottom && h < panel_h;h++) {
+            //ALOGD("DEBUG_lb Luma8bit_to_4bit_row_2, w:%d, offset:%d, offset_dst:%d", w, offset, offset_dst);
+            Luma8bit_to_8bit_row_2((short int*)(gray256_addr + offset), (short int*)(gray2_buffer + offset_dst),
                     line_buffer[h&1], line_buffer[!(h&1)], w, 0x80);
             offset += panel_w;
             offset_dst += vir_width;
@@ -2108,7 +2422,10 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
           ALOGW("Could not open %s\n",data_name);
       } else{
           ALOGW("open %s and write ok\n",data_name);
-          fwrite(buffer, buf_info.height * buf_info.width >> 1 , 1, file);
+          if (ebc_buf_format == EBC_Y4)
+              fwrite(buffer, buf_info.height * buf_info.width >> 1 , 1, file);
+          else
+		 fwrite(buffer, buf_info.height * buf_info.width , 1, file);
           fclose(file);
 
       }
@@ -2121,9 +2438,12 @@ int hwc_post_epd(int *buffer, Rect rect, int mode){
   ALOGD_IF(log_level(DBG_DEBUG),"%s, line = %d ,mode = %d, (x1,x2,y1,y2) = (%d,%d,%d,%d) ",__FUNCTION__,__LINE__,
       mode,buf_info.win_x1,buf_info.win_x2,buf_info.win_y1,buf_info.win_y2);
   unsigned long vaddr_real = intptr_t(ebc_buffer_base);
-  memcpy((void *)(vaddr_real + buf_info.offset), buffer,
-          buf_info.height * buf_info.width >> 1);
-
+  if (ebc_buf_format == EBC_Y4)
+      memcpy((void *)(vaddr_real + buf_info.offset), buffer,
+              buf_info.height * buf_info.width >> 1);
+  else
+      memcpy((void *)(vaddr_real + buf_info.offset), buffer,
+              buf_info.height * buf_info.width);
   if(ioctl(ebc_fd, EBC_SEND_BUFFER,&buf_info)!=0)
   {
      ALOGE("EBC_SEND_BUFFER failed\n");
@@ -2240,6 +2560,75 @@ int Rgb888ToGray16ByRga(char *dst_buf,int *src_buf,int  fb_height, int fb_width,
     return ret;
 }
 
+void do_gray256_buffer(uint32_t *buffer_in, uint32_t *buffer_out, int width, int height)
+{
+	uint32_t src_data;
+	uint32_t *src = buffer_in;
+	uint32_t *dst = buffer_out;
+
+	for(int i = 0; i < height; i++) {
+		for(int j = 0; j< width/4; j++) {
+			src_data = *src++;
+			src_data &= 0xf0f0f0f0;
+			*dst++ = src_data;
+		}
+	}
+}
+
+void  change_4bit_to_8bit(unsigned char *in_buffer, unsigned char *out_buffer, int size)
+{
+	int i;
+	unsigned char buffer_in;
+
+	for (i = 0; i < size; i++) {
+		buffer_in = *in_buffer++;
+		*out_buffer++ = (buffer_in & 0x0f) << 4;
+		*out_buffer++ = (buffer_in & 0xf0);
+	}
+}
+
+int Rgb888ToGray256ByRga(char *dst_buf,int *src_buf,int  fb_height, int fb_width, int vir_width) {
+    int ret = 0;
+    rga_info_t src;
+    rga_info_t dst;
+
+    RockchipRga& rkRga(RockchipRga::get());
+
+    memset(&src, 0x00, sizeof(src));
+    memset(&dst, 0x00, sizeof(dst));
+
+    src.sync_mode = RGA_BLIT_SYNC;
+    rga_set_rect(&src.rect, 0, 0, fb_width, fb_height, vir_width, fb_height, RK_FORMAT_RGBA_8888);
+    rga_set_rect(&dst.rect, 0, 0, fb_width, fb_height, vir_width, fb_height, HAL_PIXEL_FORMAT_YCrCb_NV12);
+
+    ALOGD_IF(log_level(DBG_INFO),"RK_RGA_PREPARE_SYNC rgaRotateScale  : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+        src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+        dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+
+    //src.hnd = fb_handle;
+    src.virAddr = src_buf;
+    dst.virAddr = dst_buf;
+    dst.mmuFlag = 1;
+    src.mmuFlag = 1;
+    src.rotation = 0;
+    dst.dither.enable = 0;
+    dst.dither.mode = 0;
+    dst.color_space_mode = 0x1 << 2;
+
+    dst.dither.lut0_l = 0x0000;
+    dst.dither.lut0_h = 0x0000;
+    dst.dither.lut1_l = 0x0000;
+    dst.dither.lut1_h = 0x0000;
+    ret = rkRga.RkRgaBlit(&src, &dst, NULL);
+    if(ret) {
+        ALOGE("rgaRotateScale error : src[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x],dst[x=%d,y=%d,w=%d,h=%d,ws=%d,hs=%d,format=0x%x]",
+            src.rect.xoffset, src.rect.yoffset, src.rect.width, src.rect.height, src.rect.wstride, src.rect.hstride, src.rect.format,
+            dst.rect.xoffset, dst.rect.yoffset, dst.rect.width, dst.rect.height, dst.rect.wstride, dst.rect.hstride, dst.rect.format);
+    }
+    do_gray256_buffer((uint32_t *)dst_buf, (uint32_t *)dst_buf, fb_width, fb_height);
+    return ret;
+}
+
 int hwc_post_epd_logo(const char src_path[]) {
     int *gray16_buffer;
     void *image_addr;
@@ -2262,26 +2651,40 @@ int hwc_post_epd_logo(const char src_path[]) {
         drawLogoPic(src_path, (void *)image_addr, ebc_buf_info.width, ebc_buf_info.height);
     }
 
-    gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+    if (ebc_buf_format == EBC_Y4)
+        gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height >> 1);
+    else
+        gray16_buffer = (int *)malloc(ebc_buf_info.width * ebc_buf_info.height);
     int *gray16_buffer_bak = gray16_buffer;
     char isNeedWhiteScreenWithStandby[PROPERTY_VALUE_MAX] = "n";
     /* add white screen before power-off picture, reduce shadow, open by property [ro.need.white.with.standby] */
     property_get("ro.need.white.with.standby", isNeedWhiteScreenWithStandby, "n");
     if (strcmp(isNeedWhiteScreenWithStandby, "y") == 0) {
-        memset(gray16_buffer_bak, 0xff, ebc_buf_info.width * ebc_buf_info.height >> 1);
+        if (ebc_buf_format == EBC_Y4)
+            memset(gray16_buffer_bak, 0xff, ebc_buf_info.width * ebc_buf_info.height >> 1);
+	 else
+            memset(gray16_buffer_bak, 0xf0, ebc_buf_info.width * ebc_buf_info.height);
         ALOGD_IF(log_level(DBG_DEBUG), "%s,line = %d", __FUNCTION__, __LINE__);
         //EPD post
         Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
         hwc_post_epd(gray16_buffer_bak, rect, EPD_PART_GC16);
     }
 
-    if (ebc_buf_info.panel_color == 1)
-        logo_gray256_to_gray16((char *)image_addr, (char *)gray16_buffer, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-    else if (ebc_buf_info.panel_color == 2)
-        Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-    else
-        Rgb888ToGray16ByRga((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
-
+    if (ebc_buf_format == EBC_Y4) {
+        if (ebc_buf_info.panel_color == 1)
+            logo_gray256_to_gray16((char *)image_addr, (char *)gray16_buffer, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+        else if (ebc_buf_info.panel_color == 2)
+            Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+        else
+            Rgb888ToGray16ByRga((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+    } else {
+        if (ebc_buf_info.panel_color == 1)
+            do_gray256_buffer((uint32_t *)image_addr, (uint32_t *)gray16_buffer, ebc_buf_info.width, ebc_buf_info.height);
+        else if (ebc_buf_info.panel_color == 2)
+            Rgb888_to_color_eink2((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+        else
+            Rgb888ToGray256ByRga((char *)gray16_buffer, (int *)image_addr, ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
+    }
     //EPD post
     gCurrentEpdMode = EPD_SUSPEND;
     Rect rect(0, 0, ebc_buf_info.width, ebc_buf_info.height);
@@ -2758,6 +3161,11 @@ static int hwc_device_open(const struct hw_module_t *module, const char *name,
 
   if(ioctl(ebc_fd, EBC_GET_BUFFER_INFO,&ebc_buf_info)!=0){
       ALOGE("EBC_GET_BUFFER_INFO failed\n");
+      close(ebc_fd);
+      return -1;
+  }
+  if(ioctl(ebc_fd, EBC_GET_BUF_FORMAT, &ebc_buf_format)!=0){
+      ALOGE("EBC_GET_BUF_FORMAT failed\n");
       close(ebc_fd);
       return -1;
   }

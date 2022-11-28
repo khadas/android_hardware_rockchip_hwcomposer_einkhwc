@@ -70,6 +70,12 @@ namespace android {
 #define EINK_FB_SIZE		0x400000 /* 4M */
 
 /*
+* ebc buf format
+*/
+#define EBC_Y4 (0)
+#define EBC_Y8 (1)
+
+/*
  * IMPORTANT: Those values is corresponding to android hardware program,
  * so *FORBID* to changes bellow values, unless you know what you're doing.
  * And if you want to add new refresh modes, please appended to the tail.
@@ -117,7 +123,7 @@ struct ebc_buf_info_t {
 	int win_y2;
 	int width_mm;
 	int height_mm;
-	int needpic; // 1: buf can not be drop by ebc, 0: buf can drop by ebc
+	int needpic; // 1: buf can not be drop by ebc, 0: buf can drop by ebc, 2: regal buf, can not be drop by ebc
 	char tid_name[16];
 };
 
@@ -132,17 +138,24 @@ struct win_coordinate{
 /*
  * ebc system ioctl command
  */
-#define EBC_GET_BUFFER			(0x7000)
+#define EBC_GET_BUFFER				(0x7000)
 #define EBC_SEND_BUFFER			(0x7001)
 #define EBC_GET_BUFFER_INFO		(0x7002)
 #define EBC_SET_FULL_MODE_NUM	(0x7003)
 #define EBC_ENABLE_OVERLAY		(0x7004)
 #define EBC_DISABLE_OVERLAY		(0x7005)
-#define EBC_GET_OSD_BUFFER	(0x7006)
-#define EBC_SEND_OSD_BUFFER	(0x7007)
-#define EBC_NEW_BUF_PREPARE	(0x7008)
-#define EBC_SET_DIFF_PERCENT	(0x7009)
-#define EBC_WAIT_NEW_BUF_TIME (0x700a)
+#define EBC_GET_OSD_BUFFER		(0x7006)
+#define EBC_SEND_OSD_BUFFER		(0x7007)
+#define EBC_NEW_BUF_PREPARE		(0x7008)
+#define EBC_SET_DIFF_PERCENT		(0x7009)
+#define EBC_WAIT_NEW_BUF_TIME	(0x700a)
+#define EBC_GET_OVERLAY_STATUS	(0x700b)
+#define EBC_ENABLE_BG_CONTROL	(0x700c)
+#define EBC_DISABLE_BG_CONTROL	(0x700d)
+#define EBC_ENABLE_RESUME_COUNT	(0x700e)
+#define EBC_DISABLE_RESUME_COUNT	(0x700f)
+#define EBC_GET_BUF_FORMAT		(0x7010)
+#define EBC_DROP_PREV_BUFFER		(0x7011)
 
 class EinkCompositorWorker : public Worker {
  public:
@@ -168,13 +181,15 @@ class EinkCompositorWorker : public Worker {
   int CreateNextTimelineFence();
   int FinishComposition(int timeline);
   int Rgba888ToGray256ByRga(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
+  int Rgba888ToGray256ByRga2(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle, int epd_mode);
   int Rgba8888ClipRgba(DrmRgaBuffer &rgaBuffer,const buffer_handle_t          &fb_handle);
   int Rgba888ToGray16ByRga(int *output_buffer,const buffer_handle_t          &fb_handle, int epd_mode);
   int RgaClipGrayRect(DrmRgaBuffer &rgaBuffer,const buffer_handle_t &fb_handle);
   int ConvertToColorEink1(const buffer_handle_t &fb_handle);
   int ConvertToColorEink2(const buffer_handle_t &fb_handle);
-  int InToOrOutY8Regal(const buffer_handle_t &fb_handle);
+  int IntoY8Regal(const buffer_handle_t &fb_handle);
   int ConvertToY8Regal(const buffer_handle_t &fb_handle);
+  int ConvertToY8Dither(const buffer_handle_t &fb_handle, int epd_mode);
   int ConvertToY4Dither(const buffer_handle_t &fb_handle, int epd_mode);
   int ConvertToY1Dither(const buffer_handle_t &fb_handle);
   int ColorCommit(int epd_mode);
@@ -210,6 +225,7 @@ class EinkCompositorWorker : public Worker {
 
   int ebc_fd = -1;
   void *ebc_buffer_base = NULL;
+  int ebc_buf_format = EBC_Y4;
   int waveform_fd = -1;
   void *waveform_base = NULL;
   struct ebc_buf_info_t ebc_buf_info;
@@ -222,8 +238,11 @@ class EinkCompositorWorker : public Worker {
   int rgaBuffer_index = 0;
   DrmRgaBuffer rgaBuffers[MaxRgaBuffers];
   int *gray16_buffer = NULL;
-  int *gray256_old_buffer = NULL;
   int *gray256_new_buffer = NULL;
+
+  int *gray_cur_buffer = NULL;
+  int *gray_pre_buffer = NULL;
+
   char* rga_output_addr = NULL;
   bool rgba_to_y4_by_rga = false;
   buffer_handle_t last_fb_handle = NULL;

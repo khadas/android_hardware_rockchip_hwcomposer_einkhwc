@@ -1238,6 +1238,9 @@ int EinkCompositorWorker::ConvertToY8Dither(const buffer_handle_t &fb_handle, in
   //gray256_addr = rga_output_addr;
   //gray256_to_gray16_dither_y8(gray256_addr,(char *)gray16_buffer,ebc_buf_info.height, ebc_buf_info.width, ebc_buf_info.width);
 
+  gray_cur_buffer = gray16_buffer;
+  gray_pre_buffer = gray16_buffer;
+
   if(rga_output_addr != NULL){
     hwc_unlock(src_hnd);
     rga_output_addr = NULL;
@@ -1521,7 +1524,7 @@ int EinkCompositorWorker::SetEinkMode(EinkComposition *composition) {
           } else {
               last_regal = !last_regal;
               IntoY8Regal(composition->fb_handle);
-              EinkCommit(EPD_FORCE_FULL);
+              Y4Commit(EPD_FORCE_FULL);
           }
           break;
       }

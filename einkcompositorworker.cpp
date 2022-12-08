@@ -862,7 +862,10 @@ int EinkCompositorWorker::DumpEinkSurface(int *buffer){
           ALOGW("Could not open %s\n",data_name);
       } else{
           ALOGW("open %s and write ok\n",data_name);
-          fwrite(buffer, ebc_buf_info.height * ebc_buf_info.width >> 1 , 1, file);
+          if (ebc_buf_format == EBC_Y4)
+              fwrite(buffer, ebc_buf_info.height * ebc_buf_info.width >> 1 , 1, file);
+          else
+              fwrite(buffer, ebc_buf_info.height * ebc_buf_info.width , 1, file);
           fclose(file);
 
       }

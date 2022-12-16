@@ -1234,6 +1234,8 @@ int EinkCompositorWorker::ConvertToY8Dither(const buffer_handle_t &fb_handle, in
     return ret;
   }
 
+  ioctl(ebc_fd, EBC_DROP_PREV_BUFFER, NULL);
+
   if (epd_mode == EPD_A2 || epd_mode == EPD_DU || epd_mode == EPD_DU4 || epd_mode == EPD_AUTO_DU || epd_mode == EPD_AUTO_DU4)
     change_4bit_to_8bit((unsigned char *)rga_output_addr, (unsigned char *)gray16_buffer, ebc_buf_info.width*ebc_buf_info.height>>1);
   else

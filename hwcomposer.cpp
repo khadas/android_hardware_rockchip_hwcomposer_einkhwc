@@ -109,7 +109,7 @@
 namespace android {
 #ifndef ANDROID_EINK_COMPOSITOR_WORKER_H_
 
-#define EINK_FB_SIZE        0x400000 /* 4M */
+#define EINK_FB_SIZE        0x500000 /* 5M */
 
 /*
 * ebc buf format
